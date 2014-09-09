@@ -8,6 +8,6 @@ package com.orange.controller;
  *
  * @author niuyunyun
  */
-public interface IController {
-    void onMulticastMsg(String ip);
+public interface IUIObserver {
+    
 }

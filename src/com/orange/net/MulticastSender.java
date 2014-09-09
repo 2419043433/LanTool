@@ -11,27 +11,50 @@ package com.orange.net;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.MulticastSocket;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class MulticastSender {
 
-    private int mPort;
-    private String mIP;
+    ScheduledExecutorService mExecutor = Executors.newScheduledThreadPool(1);
 
-    public MulticastSender(String ip, int port) {
-        mIP = ip;
-        mPort = port;
+    public MulticastSender() {
     }
 
-    public void send(String data) {
-        try {
-            InetAddress address = InetAddress.getByName(mIP);
-            DatagramPacket packet = new DatagramPacket(data.getBytes(),
-                    data.length(), address, mPort);
-            MulticastSocket ms = new MulticastSocket();
-            ms.send(packet);
-            ms.close();
-        } catch (Exception e) {
-            e.printStackTrace();
+    private class HeartBeatRunable implements Runnable {
+
+        private int mPort;
+        private String mIP;
+        private String mData;
+        private InetAddress mAddress;
+
+        public HeartBeatRunable(String ip, int port, String data) {
+            mIP = ip;
+            mPort = port;
+            mData = data;
+            try {
+                mAddress = InetAddress.getByName(mIP);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
+
+        @Override
+        public void run() {
+            try {
+                DatagramPacket packet = new DatagramPacket(mData.getBytes(),
+                        mData.length(), mAddress, mPort);
+                MulticastSocket ms = new MulticastSocket();
+                ms.send(packet);
+                ms.close();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    public void startHeartBeatMulticast(String ip, int port, String data) {
+        mExecutor.scheduleAtFixedRate(new HeartBeatRunable(ip, port, data), 2, 1, TimeUnit.SECONDS);
     }
 }

@@ -17,8 +17,7 @@ public class MainFrame extends javax.swing.JFrame {
     /**
      * Creates new form MainFramef
      */
-    public MainFrame(IController controller) {
-        mController = controller;
+    public MainFrame() {
         initComponents();
     }
 
@@ -47,15 +46,11 @@ public class MainFrame extends javax.swing.JFrame {
         getContentPane().setLayout(layout);
         layout.setHorizontalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(layout.createSequentialGroup()
-                .addComponent(mScrollPanel, javax.swing.GroupLayout.PREFERRED_SIZE, 263, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addGap(0, 137, Short.MAX_VALUE))
+            .addComponent(mScrollPanel, javax.swing.GroupLayout.DEFAULT_SIZE, 571, Short.MAX_VALUE)
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(layout.createSequentialGroup()
-                .addComponent(mScrollPanel, javax.swing.GroupLayout.PREFERRED_SIZE, 285, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addGap(0, 15, Short.MAX_VALUE))
+            .addComponent(mScrollPanel, javax.swing.GroupLayout.DEFAULT_SIZE, 300, Short.MAX_VALUE)
         );
 
         pack();
@@ -63,6 +58,7 @@ public class MainFrame extends javax.swing.JFrame {
 
     /***********************************************self begin**********************************/
     private IController mController;
+    private DefaultMutableTreeNode mRoot;
     public void init()
     {
         setTitle("局域网通信助手");
@@ -71,10 +67,16 @@ public class MainFrame extends javax.swing.JFrame {
     
     private void initTree()
     {
-        DefaultMutableTreeNode root = new DefaultMutableTreeNode("局域网在线成员");
-        DefaultTreeModel model = new DefaultTreeModel(root);
-        model.setRoot(root);
+        mRoot = new DefaultMutableTreeNode("局域网在线成员");
+        DefaultTreeModel model = new DefaultTreeModel(mRoot);
+        model.setRoot(mRoot);
         mTree.setModel(model);
+    }
+    
+    public void addMember(String member)
+    {
+        DefaultMutableTreeNode item = new DefaultMutableTreeNode(member);
+        mRoot.add(item);
     }
       /***********************************************self end**********************************/
     

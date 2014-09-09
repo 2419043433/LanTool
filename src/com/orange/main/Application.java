@@ -16,9 +16,7 @@ public class Application {
      * @param args the command line arguments
      */
     public static void main(String[] args) {
-        MainFrame mainFrame = new MainFrame(new Controller());
-        mainFrame.init();
-        //set show location
-        mainFrame.setVisible(true);
+        Controller controller = new Controller();
+        controller.start();
     }
 }
