@@ -5,7 +5,6 @@
 package com.orange.main;
 
 import com.orange.controller.Controller;
-import com.orange.ui.MainFrame;
 
 /**
  *
