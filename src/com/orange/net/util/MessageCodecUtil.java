@@ -9,6 +9,8 @@ import java.nio.ByteBuffer;
 
 import com.orange.net.interfaces.IMessage;
 
+//TODO: check time consumption of read and write message op to decide if we should 
+//do it on separate threads
 public class MessageCodecUtil {
 
 	/*

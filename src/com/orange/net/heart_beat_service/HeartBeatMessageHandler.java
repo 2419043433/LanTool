@@ -1,4 +1,4 @@
-package com.orange.net.multicast;
+package com.orange.net.heart_beat_service;
 
 import com.orange.net.interfaces.IMessage;
 import com.orange.net.interfaces.IMessageHandler;

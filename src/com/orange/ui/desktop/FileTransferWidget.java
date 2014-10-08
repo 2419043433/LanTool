@@ -12,27 +12,33 @@ import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JTextField;
 
+import com.orange.base.ParamKeys;
+import com.orange.base.Params;
+import com.orange.client_manage.ClientInfo;
+import com.orange.interfaces.IMessageHandler;
+import com.orange.interfaces.MessageId;
+
 public class FileTransferWidget extends JFrame {
 	private static final long serialVersionUID = 1L;
 
 	private JTextField mFilePath;
 	private JButton mSelectFileBtn;
 	private JButton mSendFileBtn;
-	
-	private Delegate mDelegate;
-	
-	public interface Delegate
-	{
-		void sendFile(String filePath);
-	}
+	private ClientInfo mClientInfo;
 
-	public FileTransferWidget(Delegate delegate) {
-		mDelegate = delegate;
-		
+	IMessageHandler mMessageHandler;
+
+	public FileTransferWidget(IMessageHandler handler) {
+		mMessageHandler = handler;
+
 		initComponents();
 		setupListeners();
 		updateLanguage();
 		updateTheme();
+	}
+
+	public void setClientInfo(ClientInfo info) {
+		mClientInfo = info;
 	}
 
 	private void initComponents() {
@@ -42,7 +48,7 @@ public class FileTransferWidget extends JFrame {
 
 		mSelectFileBtn = new JButton();
 		mSelectFileBtn.setPreferredSize(new Dimension(100, 30));
-		
+
 		mSendFileBtn = new JButton();
 		mSendFileBtn.setPreferredSize(new Dimension(100, 30));
 
@@ -50,8 +56,9 @@ public class FileTransferWidget extends JFrame {
 		container.setLayout(new FlowLayout());
 		container.add(mFilePath);
 		container.add(mSelectFileBtn);
+		container.add(mSendFileBtn);
 
-		setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
+		setDefaultCloseOperation(javax.swing.WindowConstants.HIDE_ON_CLOSE);
 		pack();
 	}
 
@@ -61,10 +68,13 @@ public class FileTransferWidget extends JFrame {
 				showFileSelectDialog();
 			}
 		});
-		
+
 		mSendFileBtn.addMouseListener(new MouseAdapter() {
 			public void mouseClicked(MouseEvent e) {
-				sendFile(mFilePath.getText());
+				Params param = Params.obtain()
+						.put(ParamKeys.Path, mFilePath.getText())
+						.put(ParamKeys.ClientInfo, mClientInfo);
+				mMessageHandler.handleMessage(MessageId.StartFileTransfer, param, null);
 			}
 		});
 	}
@@ -72,6 +82,7 @@ public class FileTransferWidget extends JFrame {
 	private void updateLanguage() {
 		mFilePath.setText("文件路径");
 		mSelectFileBtn.setText("选择...");
+		mSendFileBtn.setText("发送");
 	}
 
 	private void updateTheme() {
@@ -87,14 +98,4 @@ public class FileTransferWidget extends JFrame {
 			mFilePath.setText(file.getAbsolutePath());
 		}
 	}
-	
-	private void sendFile(String filePath)
-	{
-		if(null == mDelegate || null == filePath || filePath.isEmpty())
-		{
-			return;
-		}
-		mDelegate.sendFile(filePath);
-	}
-
 }

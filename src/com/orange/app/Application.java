@@ -2,7 +2,7 @@
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
  */
-package com.orange.main;
+package com.orange.app;
 
 import com.orange.controller.Controller;
 

@@ -1,4 +1,4 @@
-package com.orange.net.multicast;
+package com.orange.net.heart_beat_service;
 
 import java.util.Timer;
 import java.util.TimerTask;
@@ -6,9 +6,10 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.orange.base.thread.IOThread;
-import com.orange.interfaces.ThreadDelegate;
+import com.orange.base.thread.Threads;
 import com.orange.net.FrameDecoder;
 import com.orange.net.MessageDecoder;
+import com.orange.net.multicast.MulticastServer;
 import com.orange.net.udp.DatagramPacketDecoder;
 
 public class HeartBeatService implements
@@ -16,21 +17,20 @@ public class HeartBeatService implements
 
 	private MulticastServer mServer;
 	private MessageDecoder mMessageDecoder;
-	private ThreadDelegate mHeartBeatListenThread;
-	private ThreadDelegate mUIThread;
+	private IOThread mHeartBeatListenThread;
 	private Heart mHeart;
 	private String mIp;
 	private int mPort;
 	private Delegate mDelegate;
-	
-	public static interface Delegate
-	{
+
+	public static interface Delegate {
 		void onHeartBeatMessageReceived(HeartBeatMessage msg);
 	}
 
 	public HeartBeatService(String ip, int port) {
 		mIp = ip;
 		mPort = port;
+		//better by setting it
 		mHeartBeatListenThread = new IOThread();
 		mHeart = new Heart(port);
 		mMessageDecoder = new MessageDecoder();
@@ -38,15 +38,9 @@ public class HeartBeatService implements
 		mServer = new MulticastServer(new DatagramPacketDecoder(
 				new FrameDecoder(mMessageDecoder)));
 	}
-	
-	public void setDelegate(Delegate delegate)
-	{
+
+	public void setDelegate(Delegate delegate) {
 		mDelegate = delegate;
-	}
-	
-	public void setUIThreadDelegate(ThreadDelegate uiThread)
-	{
-		mUIThread = uiThread;
 	}
 
 	private void setupMessageHandlers() {
@@ -56,18 +50,18 @@ public class HeartBeatService implements
 
 	@Override
 	public void onHeartBeatMessageReceived(HeartBeatMessage msg) {
-		Logger.getLogger("HeartBeatService").log(Level.INFO, "receive " + msg);
-		
-		mUIThread.post(new HeartBeatMessageRunnable(msg));
+		//Logger.getLogger("HeartBeatService").log(Level.INFO, "receive " + msg);
+
+		Threads.forThread(Threads.Type.UI).post(new HeartBeatMessageRunnable(msg));
 	}
-	
-	private class HeartBeatMessageRunnable implements Runnable
-	{
+
+	private class HeartBeatMessageRunnable implements Runnable {
 		private HeartBeatMessage mMsg;
-		public HeartBeatMessageRunnable(HeartBeatMessage msg)
-		{
+
+		public HeartBeatMessageRunnable(HeartBeatMessage msg) {
 			mMsg = msg;
 		}
+
 		@Override
 		public void run() {
 			mDelegate.onHeartBeatMessageReceived(mMsg);

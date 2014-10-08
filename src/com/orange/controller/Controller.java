@@ -4,59 +4,100 @@
  */
 package com.orange.controller;
 
-import com.orange.base.thread.UIThread;
-import com.orange.net.multicast.HeartBeatMessage;
-import com.orange.net.multicast.HeartBeatService;
-import com.orange.ui.desktop.FileTransferWidget;
-import com.orange.ui.desktop.MainFrame;
+import com.orange.base.ParamKeys;
+import com.orange.base.Params;
+import com.orange.base.thread.Threads;
+import com.orange.client_manage.ClientInfo;
+import com.orange.file_transfer.FileReceiveService;
+import com.orange.file_transfer.FileTransferService;
+import com.orange.interfaces.CommandId;
+import com.orange.interfaces.ICommandProcessor;
+import com.orange.interfaces.IMessageHandler;
+import com.orange.interfaces.MessageId;
+import com.orange.net.asio.AsyncChannelFactory;
+import com.orange.net.heart_beat_service.HeartBeatMessage;
+import com.orange.net.heart_beat_service.HeartBeatService;
+import com.orange.ui.UIManager;
 
 /**
  * 
  * @author niuyunyun
  */
-public class Controller {
+public class Controller implements IMessageHandler, ICommandProcessor {
 
 	private static final String kIP = "224.0.0.0";
-	private static final int kPort = 5000;
-	private MainFrame mMainFrame;
+	private static final int kPort = 6000;
+	UIManager mUiManager;
 	private HeartBeatService mHeartBeatService;
-	private UIThread mUiThread;
+	private FileTransferService mFileTransferService;
+	private FileReceiveService mFileReceiveService;
 
 	public Controller() {
-		mMainFrame = new MainFrame(mMainFrameDelegate);
-		mUiThread = new UIThread();
+		initComponents();
+	}
+
+	private void initComponents() {
+		// threads
+		Threads.init();
+
+		// UI manager
+		mUiManager = new UIManager(this);
+		// heart beat service
 		mHeartBeatService = new HeartBeatService(kIP, kPort);
-		mHeartBeatService.setUIThreadDelegate(mUiThread);
 		mHeartBeatService.setDelegate(mHeartBeatServiceDelegate);
+
+		mFileTransferService = new FileTransferService(this);
+		mFileReceiveService = new FileReceiveService(this);
+		mFileReceiveService.setChannelFactory(new AsyncChannelFactory());
 	}
 
 	public void start() {
+		// show main UI
+		mUiManager.processCommand(CommandId.ShowMainFrame, null, null);
 		// start heart beat listen and timer send
 		mHeartBeatService.start();
+		//TODO: should start at appropriate time
+		mFileReceiveService.start();
 	}
-
-	private FileTransferWidget.Delegate mFileTransferDelegate = new FileTransferWidget.Delegate() {
-
-		@Override
-		public void sendFile(String filePath) {
-
-		}
-	};
 
 	private HeartBeatService.Delegate mHeartBeatServiceDelegate = new HeartBeatService.Delegate() {
 		@Override
 		public void onHeartBeatMessageReceived(HeartBeatMessage msg) {
-			String member = "[host:" + msg.getHost() + "][ip:" + msg.getIp() + "][pid"
-					+ msg.getPID() + "]";
-			mMainFrame.addMember(member);
+			Params param = Params.obtain().put(ParamKeys.ClientInfo,
+					new ClientInfo(msg.getIp(), msg.getHost()));
+			mUiManager.processCommand(CommandId.AddMember, param, null);
 		}
 	};
 
-	private MainFrame.Delegate mMainFrameDelegate = new MainFrame.Delegate() {
-	};
+	@Override
+	public boolean processCommand(CommandId id, Params param, Params result) {
+		// TODO Auto-generated method stub
+		return false;
+	}
 
-	public FileTransferWidget.Delegate asFileTransferDelegate() {
-		return mFileTransferDelegate;
+	@Override
+	public boolean handleMessage(MessageId id, Params param, Params result) {
+		boolean handled = true;
+		switch (id) {
+
+		case ShowFileTransferWidget:
+			mUiManager.processCommand(CommandId.ShowFileTransferWidget, param,
+					result);
+			break;
+		case StartFileTransfer: {
+			mFileTransferService.processCommand(CommandId.StartFileTransfer,
+					param, result);
+		}
+			break;
+		case OnFileTransferProgressChanged:
+		case OnFileTransferError:
+			break;
+
+		default:
+			handled = false;
+			break;
+		}
+		return handled;
 	}
 
 }

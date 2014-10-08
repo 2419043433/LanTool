@@ -1,4 +1,4 @@
-package com.orange.net.multicast;
+package com.orange.net.heart_beat_service;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
