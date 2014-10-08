@@ -28,4 +28,6 @@ public interface AsyncChannelBase {
 	void connect(SocketAddress server);
 	
 	void write(byte[] data, Object attach);
+	
+	SocketAddress getRemoteAddress();
 }

@@ -5,4 +5,5 @@ public enum MessageId {
 	StartFileTransfer,
 	OnFileTransferProgressChanged,
 	OnFileTransferError,
+	OnRequestFileTransfer,
 }

@@ -111,4 +111,15 @@ public class AsyncChannel implements AsyncChannelBase {
 				});
 	}
 
+	@Override
+	public SocketAddress getRemoteAddress() {
+		try {
+			return mChannel.getRemoteAddress();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		return null;
+	}
+
 }

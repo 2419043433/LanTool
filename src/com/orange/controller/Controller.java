@@ -8,6 +8,7 @@ import com.orange.base.ParamKeys;
 import com.orange.base.Params;
 import com.orange.base.thread.Threads;
 import com.orange.client_manage.ClientInfo;
+import com.orange.client_manage.ClientInfoManager;
 import com.orange.file_transfer.FileReceiveService;
 import com.orange.file_transfer.FileTransferService;
 import com.orange.interfaces.CommandId;
@@ -31,6 +32,7 @@ public class Controller implements IMessageHandler, ICommandProcessor {
 	private HeartBeatService mHeartBeatService;
 	private FileTransferService mFileTransferService;
 	private FileReceiveService mFileReceiveService;
+	private ClientInfoManager mClientInfoManager;
 
 	public Controller() {
 		initComponents();
@@ -46,6 +48,7 @@ public class Controller implements IMessageHandler, ICommandProcessor {
 		mHeartBeatService = new HeartBeatService(kIP, kPort);
 		mHeartBeatService.setDelegate(mHeartBeatServiceDelegate);
 
+		mClientInfoManager = new ClientInfoManager();
 		mFileTransferService = new FileTransferService(this);
 		mFileReceiveService = new FileReceiveService(this);
 		mFileReceiveService.setChannelFactory(new AsyncChannelFactory());
@@ -56,15 +59,17 @@ public class Controller implements IMessageHandler, ICommandProcessor {
 		mUiManager.processCommand(CommandId.ShowMainFrame, null, null);
 		// start heart beat listen and timer send
 		mHeartBeatService.start();
-		//TODO: should start at appropriate time
+		// TODO: should start at appropriate time
 		mFileReceiveService.start();
 	}
 
 	private HeartBeatService.Delegate mHeartBeatServiceDelegate = new HeartBeatService.Delegate() {
 		@Override
 		public void onHeartBeatMessageReceived(HeartBeatMessage msg) {
+			ClientInfo clientInfo = new ClientInfo(msg.getIp(), msg.getHost());
+			mClientInfoManager.addClient(clientInfo);
 			Params param = Params.obtain().put(ParamKeys.ClientInfo,
-					new ClientInfo(msg.getIp(), msg.getHost()));
+					clientInfo);
 			mUiManager.processCommand(CommandId.AddMember, param, null);
 		}
 	};
@@ -89,7 +94,17 @@ public class Controller implements IMessageHandler, ICommandProcessor {
 					param, result);
 		}
 			break;
-		case OnFileTransferProgressChanged:
+		case OnFileTransferProgressChanged: {
+			String ip = param.getString(ParamKeys.Ip);
+			int port = param.getInt(ParamKeys.Port);
+			String path = param.getString(ParamKeys.Path);
+			int progress = param.getInt(ParamKeys.Value);
+			//do some check 
+			//notify ui
+			mUiManager.processCommand(CommandId.OnFileTransferProgressChanged,
+					param, result);
+		}
+			break;
 		case OnFileTransferError:
 			break;
 

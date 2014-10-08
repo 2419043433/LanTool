@@ -68,6 +68,7 @@ public class MainFrame extends javax.swing.JFrame implements ICommandProcessor {
 		getContentPane().add(mScrollPane);
 		setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
 		pack();
+		setSize(800, 600);
 		setLocationRelativeTo(null);
 		setupMenu();
 	}

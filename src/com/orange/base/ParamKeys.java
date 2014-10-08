@@ -7,4 +7,6 @@ public enum ParamKeys {
 	ProcessId,
 	ClientInfo,
 	Path,
+	Value,
+	Message,
 }

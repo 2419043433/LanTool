@@ -72,6 +72,9 @@ public class UIManager implements ICommandProcessor, IMessageHandler {
 		case AddMember:
 			mMainFrame.processCommand(id, param, result);
 			break;
+		case OnFileTransferProgressChanged:
+			mFileTransferWidget.processCommand(id, param, result);
+			break;
 
 		default:
 			break;

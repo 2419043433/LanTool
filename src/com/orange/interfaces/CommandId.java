@@ -8,5 +8,6 @@ public enum CommandId {
 	AddMember,
 	StartFileTransfer,
 	ShowSendFileWidget,
-	SendFile;
+	SendFile,
+	OnFileTransferProgressChanged,
 }

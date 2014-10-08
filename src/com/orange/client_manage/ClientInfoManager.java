@@ -5,16 +5,16 @@ import java.util.ArrayList;
 //in java currently implemented by DefaultTreeModel
 public class ClientInfoManager {
 	ArrayList<ClientInfo> mClientInfos = new ArrayList<ClientInfo>();
-	
-	void addClient(ClientInfo info)
-	{
-		mClientInfos.add(info);
+
+	public ClientInfoManager() {
 	}
-	
-	void removeClient(ClientInfo info)
-	{
-		mClientInfos.remove(info);
+
+	public void addClient(ClientInfo clientInfo) {
+		mClientInfos.add(clientInfo);
 	}
-	
-	
+
+	public void removeClient(ClientInfo clientInfo) {
+		mClientInfos.remove(clientInfo);
+	}
+
 }

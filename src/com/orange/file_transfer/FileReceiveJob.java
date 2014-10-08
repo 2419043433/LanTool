@@ -102,7 +102,18 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 	}
 
 	public void start() {
-		mChannel.read(null);
+		startOnIOThread();
+	}
+	
+	private void startOnIOThread()
+	{
+		Threads.forThread(Threads.Type.IO_Network).post(new Runnable() {
+			
+			@Override
+			public void run() {
+				mChannel.read(null);
+			}
+		});
 	}
 
 	class WriteBlockRunnable implements Runnable {
@@ -121,7 +132,7 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 					e.printStackTrace();
 				}
 
-				Threads.forThread(Threads.Type.UI).post(new Runnable() {
+				Threads.forThread(Threads.Type.IO_Network).post(new Runnable() {
 
 					@Override
 					public void run() {

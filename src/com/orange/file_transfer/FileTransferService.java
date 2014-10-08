@@ -52,7 +52,8 @@ public class FileTransferService implements ICommandProcessor,
 	public void onProgressChanged(FileTransferJob job, int progress) {
 		Params param = Params.obtain().put(ParamKeys.Ip, job.getDestIp())
 				.put(ParamKeys.Port, job.getDestPort())
-				.put(ParamKeys.Path, job.getFilePath());
+				.put(ParamKeys.Path, job.getFilePath())
+				.put(ParamKeys.Value, progress);
 		mMessageHandler.handleMessage(MessageId.OnFileTransferProgressChanged,
 				param, null);
 	}
