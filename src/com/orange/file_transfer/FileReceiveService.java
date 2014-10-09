@@ -11,7 +11,7 @@ import com.orange.net.asio.interfaces.AsyncServerChannelBase;
 
 public class FileReceiveService {
 	private IMessageHandler mMessageHandler;
-	private int mPort = 5000;
+	private int mPort = 7000;
 	private AsyncChannelFactoryBase mChannelFactory;
 	private Map<AsyncChannelBase, FileReceiveJob> mJobs = new HashMap<AsyncChannelBase, FileReceiveJob>();
 

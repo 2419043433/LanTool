@@ -23,7 +23,9 @@ public class FrameDecoder implements IStreamDecoder {
 	@Override
 	public void decode(byte[] buffer, int offset, int length) {
 		// length
+		System.out.println("before put:" + mReceiveBuffer.position());
 		mReceiveBuffer.put(buffer, 0, length);
+		System.out.println("after put:" + mReceiveBuffer.position());
 		mReceiveBuffer.flip();
 		while (true) {
 			if (mReceiveBuffer.remaining() < 4) {
@@ -41,7 +43,7 @@ public class FrameDecoder implements IStreamDecoder {
 			{
 				mNextHandler.decode(mReceiveBuffer.array(), mReceiveBuffer.position(), messageLength);
 			}
-			
+			System.out.println("new position:" + (mReceiveBuffer.position() + messageLength) + " limit:" + mReceiveBuffer.limit() + "threadid:" + Thread.currentThread().getId());
 			mReceiveBuffer.position(mReceiveBuffer.position() + messageLength);
 		}
 		

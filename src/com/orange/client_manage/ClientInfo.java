@@ -14,6 +14,6 @@ public class ClientInfo {
 	public String mIp;
 	public String mHost;
 	//this port should be set by command channel.
-	public int mPort = 5000;
+	public int mPort = 7000;
 
 }

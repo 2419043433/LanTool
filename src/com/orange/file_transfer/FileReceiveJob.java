@@ -69,7 +69,8 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 				for (int i = start + 1; i <= end; ++i) {
 					toWrite.add(mReceivedBlocks.get(i));
 				}
-
+				Logger.getLogger(TAG).log(Level.INFO,
+						"write block " + start + ":" + end);
 				Threads.forThread(Threads.Type.IO_File).post(
 						new WriteBlockRunnable(toWrite));
 			}
