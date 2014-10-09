@@ -95,8 +95,7 @@ public class Controller implements IMessageHandler, ICommandProcessor {
 		}
 			break;
 		case OnFileTransferProgressChanged: {
-			String ip = param.getString(ParamKeys.Ip);
-			int port = param.getInt(ParamKeys.Port);
+			ClientInfo clientInfo = (ClientInfo)param.get(ParamKeys.ClientInfo);
 			String path = param.getString(ParamKeys.Path);
 			int progress = param.getInt(ParamKeys.Value);
 			//do some check 

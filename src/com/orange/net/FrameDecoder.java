@@ -3,6 +3,8 @@ package com.orange.net;
 import java.nio.ByteBuffer;
 
 import com.orange.net.interfaces.IStreamDecoder;
+import com.orange.util.SystemUtil;
+
 /*
  * [ length | frame  |
  * |-- 4 ---|-length-|
@@ -23,9 +25,7 @@ public class FrameDecoder implements IStreamDecoder {
 	@Override
 	public void decode(byte[] buffer, int offset, int length) {
 		// length
-		System.out.println("before put:" + mReceiveBuffer.position());
 		mReceiveBuffer.put(buffer, 0, length);
-		System.out.println("after put:" + mReceiveBuffer.position());
 		mReceiveBuffer.flip();
 		while (true) {
 			if (mReceiveBuffer.remaining() < 4) {
@@ -38,17 +38,20 @@ public class FrameDecoder implements IStreamDecoder {
 				mReceiveBuffer.reset();
 				break;
 			}
-			
-			if(null != mNextHandler)
-			{
-				mNextHandler.decode(mReceiveBuffer.array(), mReceiveBuffer.position(), messageLength);
+
+			if (null != mNextHandler) {
+				mNextHandler.decode(mReceiveBuffer.array(),
+						mReceiveBuffer.position(), messageLength);
 			}
-			System.out.println("new position:" + (mReceiveBuffer.position() + messageLength) + " limit:" + mReceiveBuffer.limit() + "threadid:" + Thread.currentThread().getId());
+//			System.out.println("new position:"
+//					+ (mReceiveBuffer.position() + messageLength) + " limit:"
+//					+ mReceiveBuffer.limit() + "[threadid:"
+//					+ Thread.currentThread().getId()
+//					+ "][processid:" + SystemUtil.getPID() + "]");
 			mReceiveBuffer.position(mReceiveBuffer.position() + messageLength);
 		}
-		
+
 		mReceiveBuffer.compact();
 	}
-
 
 }

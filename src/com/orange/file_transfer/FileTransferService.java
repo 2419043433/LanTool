@@ -23,11 +23,11 @@ public class FileTransferService implements ICommandProcessor,
 	}
 
 	public void startFileTransfer(Params param) {
-		ClientInfo info = (ClientInfo)param.get(ParamKeys.ClientInfo);
+		ClientInfo info = (ClientInfo) param.get(ParamKeys.ClientInfo);
 		String path = param.getString(ParamKeys.Path);
 		FileTransferJob job = new FileTransferJob();
 		mJobs.add(job);
-		job.setDest(info.mIp, info.mPort);
+		job.setClientInfo(info);
 		job.setFilePath(path);
 		job.setAsyncChannelFactory(new AsyncChannelFactory());
 		job.setClient(this);
@@ -50,8 +50,8 @@ public class FileTransferService implements ICommandProcessor,
 
 	@Override
 	public void onProgressChanged(FileTransferJob job, int progress) {
-		Params param = Params.obtain().put(ParamKeys.Ip, job.getDestIp())
-				.put(ParamKeys.Port, job.getDestPort())
+		Params param = Params.obtain()
+				.put(ParamKeys.ClientInfo, job.getClientInfo())
 				.put(ParamKeys.Path, job.getFilePath())
 				.put(ParamKeys.Value, progress);
 		mMessageHandler.handleMessage(MessageId.OnFileTransferProgressChanged,
@@ -61,8 +61,9 @@ public class FileTransferService implements ICommandProcessor,
 	@Override
 	public void onError(FileTransferJob job, ErrorCode errorCode, String msg,
 			Throwable throwable) {
-		Params param = Params.obtain().put(ParamKeys.Ip, job.getDestIp())
-				.put(ParamKeys.Port, job.getDestPort())
+		Params param = Params.obtain()
+				.put(ParamKeys.ClientInfo, job.getClientInfo())
+				.put(ParamKeys.Path, job.getFilePath())
 				.put(ParamKeys.Path, job.getFilePath());
 		mMessageHandler.handleMessage(MessageId.OnFileTransferError, param,
 				null);

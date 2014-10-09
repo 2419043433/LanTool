@@ -11,9 +11,12 @@ import java.util.logging.Logger;
 
 import com.orange.base.ErrorCode;
 import com.orange.base.thread.Threads;
+import com.orange.client_manage.ClientInfo;
+import com.orange.file_transfer.FileReceiveJob.ReadCompletedRunnable;
 import com.orange.net.asio.interfaces.AsyncChannelBase;
 import com.orange.net.asio.interfaces.AsyncChannelFactoryBase;
 import com.orange.net.util.MessageCodecUtil;
+import com.orange.util.SystemUtil;
 
 //TODO: add weak semantics
 //currently we just implement small file transfer, huge file transfer should make a new implementation
@@ -42,8 +45,7 @@ public class FileTransferJob {
 	// ---------------------------------------------IO Thread only end
 	private File mFile;
 	private long mFilePointer = 0;
-	private String mDestIp;
-	private int mDestPort;
+	private ClientInfo mClientInfo;
 	private Client mClient;
 	private AsyncChannelFactoryBase mChannelFactory;
 	private AsyncChannelBase mChannel;
@@ -51,6 +53,10 @@ public class FileTransferJob {
 
 	private enum FileTransferState {
 		Init, Connect, ReadHeader, SendHeader, ReadBody, SendBody, Finished
+	}
+
+	private void log(String info) {
+		// Logger.getLogger(TAG).log(Level.INFO, info);
 	}
 
 	public FileTransferJob() {
@@ -66,8 +72,7 @@ public class FileTransferJob {
 			@Override
 			public void onProgressChaned(int progress) {
 				notifyProgressChangedOnUIThread(progress);
-				Logger.getLogger(TAG).log(Level.INFO,
-						"send progress " + progress + "%");
+				log("send progress " + progress + "%");
 			}
 
 			@Override
@@ -91,8 +96,7 @@ public class FileTransferJob {
 
 			@Override
 			public void onProgressChaned(int progress) {
-				Logger.getLogger(TAG).log(Level.INFO,
-						"read progress " + progress + "%");
+				log("read progress " + progress + "%");
 			}
 
 			@Override
@@ -113,9 +117,12 @@ public class FileTransferJob {
 		});
 	}
 
-	public void setDest(String ip, int port) {
-		mDestIp = ip;
-		mDestPort = port;
+	public void setClientInfo(ClientInfo info) {
+		mClientInfo = info;
+	}
+
+	public ClientInfo getClientInfo() {
+		return mClientInfo;
 	}
 
 	public void setFilePath(String path) {
@@ -129,14 +136,6 @@ public class FileTransferJob {
 
 	public String getFilePath() {
 		return mFile.getAbsolutePath();
-	}
-
-	public String getDestIp() {
-		return mDestIp;
-	}
-
-	public int getDestPort() {
-		return mDestPort;
 	}
 
 	public void setClient(Client client) {
@@ -170,7 +169,8 @@ public class FileTransferJob {
 			public void run() {
 				mChannel = mChannelFactory.createAsyncChannel();
 				mChannel.setClient(mAsyncChannelClient);
-				mChannel.connect(new InetSocketAddress(mDestIp, mDestPort));
+				mChannel.connect(new InetSocketAddress(mClientInfo.mIp,
+						mClientInfo.mPort));
 				mState = FileTransferState.Connect;
 			}
 		});
@@ -248,6 +248,9 @@ public class FileTransferJob {
 		message.setContentLength(item.mContentLength);
 		message.setData(item.mBuffer);
 		byte[] data = MessageCodecUtil.writeMessage(message);
+		System.out.println("write: " + data.length + "[threadid:"
+				+ Thread.currentThread().getId() + "][name:"
+				+ Thread.currentThread().getName() + "]");
 		mChannel.write(data, (Object) item);
 	}
 
@@ -261,8 +264,7 @@ public class FileTransferJob {
 		@Override
 		public void run() {
 			try {
-				if(mFileInputStream.available() == 0)
-				{
+				if (mFileInputStream.available() == 0) {
 					return;
 				}
 			} catch (IOException e1) {
@@ -278,8 +280,7 @@ public class FileTransferJob {
 				 * buffer.length byte data
 				 */
 				bytesRead = mFileInputStream.read(mItem.mBuffer);
-				Logger.getLogger(TAG).log(Level.INFO,
-						"readFile****: " + bytesRead);
+				log("readFile****: " + bytesRead);
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
@@ -320,45 +321,74 @@ public class FileTransferJob {
 
 		@Override
 		public void onConnected(AsyncChannelBase channel) {
-			assert (mState == FileTransferState.Connect);
-			if (mState != FileTransferState.Connect) {
-				mClient.onError(FileTransferJob.this,
-						ErrorCode.ErrorIllegalState,
-						"Connect completed but job on state [" + mState + "]",
-						null);
-				return;
-			}
-			sendHeader();
-			mState = FileTransferState.SendHeader;
+
+			Threads.forThread(Threads.Type.IO_Network).post(new Runnable() {
+
+				@Override
+				public void run() {
+					assert (mState == FileTransferState.Connect);
+					if (mState != FileTransferState.Connect) {
+						mClient.onError(FileTransferJob.this,
+								ErrorCode.ErrorIllegalState,
+								"Connect completed but job on state [" + mState
+										+ "]", null);
+						return;
+					}
+					sendHeader();
+					mState = FileTransferState.SendHeader;
+				}
+			});
+
 		}
 
 		@Override
 		public void onError(AsyncChannelBase channel, ErrorCode errorCode,
 				String msg, Throwable throwable) {
-			mClient.onError(FileTransferJob.this, errorCode, msg, throwable);
+			// mClient.onError(FileTransferJob.this, errorCode, msg, throwable);
 			// may handle error here
+		}
+
+		class WriteCompletedRunnable implements Runnable {
+
+			private AsyncChannelBase mChannelHolder;
+			private int mLengthHolder;
+			private Object mAttachHolder;
+
+			public WriteCompletedRunnable(AsyncChannelBase channel, int length,
+					Object attach) {
+				mChannelHolder = channel;
+				mLengthHolder = length;
+				mAttachHolder = attach;
+			}
+
+			@Override
+			public void run() {
+				System.out.println("onWriteCompleted: " + mLengthHolder
+						+ "[threadid:" + Thread.currentThread().getId()
+						+ "][name:" + Thread.currentThread().getName() + "]");
+				assert (mState == FileTransferState.SendHeader || mState == FileTransferState.SendBody);
+				switch (mState) {
+				case SendHeader:
+					mState = FileTransferState.SendBody;
+					break;
+				case SendBody:
+					BlockBuffer.Item item = (BlockBuffer.Item) mAttachHolder;
+					item.mState = BlockBufferState.Idle;
+					mSendBlockMarks.onBlockFinished(item.mIndex);
+					break;
+				default:
+					break;
+				}
+				sendBody();
+				checkAndReadBody();
+			}
 		}
 
 		@Override
 		public void onWriteCompleted(AsyncChannelBase channel, int length,
 				Object attach) {
-//			Logger.getLogger(TAG)
-//					.log(Level.INFO, "onWriteCompleted: " + length + "[threadid:" + Thread.currentThread().getId() + "]");
-			assert (mState == FileTransferState.SendHeader || mState == FileTransferState.SendBody);
-			switch (mState) {
-			case SendHeader:
-				mState = FileTransferState.SendBody;
-				break;
-			case SendBody:
-				BlockBuffer.Item item = (BlockBuffer.Item) attach;
-				item.mState = BlockBufferState.Idle;
-				mSendBlockMarks.onBlockFinished(item.mIndex);
-				break;
-			default:
-				break;
-			}
-			sendBody();
-			checkAndReadBody();
+			Threads.forThread(Threads.Type.IO_Network).post(
+					new WriteCompletedRunnable(channel, length, attach));
 		}
 	};
 

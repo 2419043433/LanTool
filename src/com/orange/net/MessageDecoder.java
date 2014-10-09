@@ -28,7 +28,6 @@ public class MessageDecoder implements IStreamDecoder {
 
 	@Override
 	public void decode(byte[] buffer, int offset, int length) {
-		System.out.println("messagelen:" + length);
 		IMessage message = MessageCodecUtil.readMessage(buffer, offset, length);
 		assert (null != message);
 		if(null == message)

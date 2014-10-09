@@ -41,6 +41,10 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 		void onError(FileReceiveJob job);
 	}
 
+	private void log(String info) {
+		// Logger.getLogger(TAG).log(Level.INFO, info);
+	}
+
 	public FileReceiveJob(AsyncChannelBase channel) {
 		mChannel = channel;
 		mChannel.setClient(this);
@@ -59,8 +63,7 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 
 			@Override
 			public void onProgressChaned(int progress) {
-				Logger.getLogger(TAG).log(Level.INFO,
-						"receive progress " + progress + "%");
+				log("receive progress " + progress + "%");
 			}
 
 			@Override
@@ -69,8 +72,7 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 				for (int i = start + 1; i <= end; ++i) {
 					toWrite.add(mReceivedBlocks.get(i));
 				}
-				Logger.getLogger(TAG).log(Level.INFO,
-						"write block " + start + ":" + end);
+				log("write block " + start + ":" + end);
 				Threads.forThread(Threads.Type.IO_File).post(
 						new WriteBlockRunnable(toWrite));
 			}
@@ -90,8 +92,7 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 			@Override
 			public void onProgressChaned(int progress) {
 				mClient.onProgressChanged(FileReceiveJob.this, progress);
-				Logger.getLogger(TAG).log(Level.INFO,
-						"write progress " + progress + "%");
+				log("write progress " + progress + "%");
 			}
 
 			@Override
@@ -105,11 +106,10 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 	public void start() {
 		startOnIOThread();
 	}
-	
-	private void startOnIOThread()
-	{
+
+	private void startOnIOThread() {
 		Threads.forThread(Threads.Type.IO_Network).post(new Runnable() {
-			
+
 			@Override
 			public void run() {
 				mChannel.read(null);
@@ -128,7 +128,8 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 		public void run() {
 			for (FileTransferBlockMessage block : mBlocks) {
 				try {
-					mFileOutputStream.write(block.getData(), 0, block.getContentLength());
+					mFileOutputStream.write(block.getData(), 0,
+							block.getContentLength());
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
@@ -188,13 +189,34 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 		}
 	};
 
+	class ReadCompletedRunnable implements Runnable {
+
+		private AsyncChannelBase mChannelHolder;
+		private byte[] mBufferHolder;
+		private int mLengthHolder;
+		private Object mAttachHolder;
+		
+		public ReadCompletedRunnable(AsyncChannelBase channel, byte[] buffer,
+				int length, Object attach)
+		{
+			mChannelHolder = channel;
+			mBufferHolder = buffer;
+			mLengthHolder = length;
+			mAttachHolder = attach;
+		}
+		@Override
+		public void run() {
+			log("onReadCompleted: " + mLengthHolder);
+			mStreamDecoder.decode(mBufferHolder, 0, mLengthHolder);
+			mChannel.read(null);
+		}
+	}
+
 	// From AsyncChannelBase.Client
 	@Override
 	public boolean onReadCompleted(AsyncChannelBase channel, byte[] buffer,
 			int length, Object attach) {
-		Logger.getLogger(TAG).log(Level.INFO, "onReadCompleted: " + length);
-		mStreamDecoder.decode(buffer, 0, length);
-		mChannel.read(null);
+		Threads.forThread(Threads.Type.IO_Network).post(new ReadCompletedRunnable(channel, buffer, length, attach));
 		return true;
 	}
 
