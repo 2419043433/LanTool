@@ -6,17 +6,13 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import com.orange.base.ErrorCode;
 import com.orange.base.thread.Threads;
 import com.orange.client_manage.ClientInfo;
-import com.orange.file_transfer.FileReceiveJob.ReadCompletedRunnable;
 import com.orange.net.asio.interfaces.AsyncChannelBase;
 import com.orange.net.asio.interfaces.AsyncChannelFactoryBase;
 import com.orange.net.util.MessageCodecUtil;
-import com.orange.util.SystemUtil;
 
 //TODO: add weak semantics
 //currently we just implement small file transfer, huge file transfer should make a new implementation
@@ -67,11 +63,23 @@ public class FileTransferJob {
 			@Override
 			public void onAllFinished() {
 				mState = FileTransferState.Finished;
+				Threads.forThread(Threads.Type.UI).post(new Runnable() {
+					@Override
+					public void run() {
+						mClient.onFinished(FileTransferJob.this);
+					}
+				});
 			}
 
 			@Override
 			public void onProgressChaned(int progress) {
-				notifyProgressChangedOnUIThread(progress);
+				Threads.forThread(Threads.Type.UI).post(new Runnable() {
+					@Override
+					public void run() {
+						mClient.onProgressChanged(FileTransferJob.this,
+								progress);
+					}
+				});
 				log("send progress " + progress + "%");
 			}
 
@@ -103,16 +111,6 @@ public class FileTransferJob {
 			public void onRangeFinished(int start, int end) {
 				// TODO Auto-generated method stub
 
-			}
-		});
-	}
-
-	private void notifyProgressChangedOnUIThread(int progress) {
-		Threads.forThread(Threads.Type.UI).post(new Runnable() {
-
-			@Override
-			public void run() {
-				mClient.onProgressChanged(FileTransferJob.this, progress);
 			}
 		});
 	}
@@ -177,6 +175,7 @@ public class FileTransferJob {
 	}
 
 	private void sendHeader() {
+		mState = FileTransferState.SendHeader;
 		Threads.forThread(Threads.Type.IO_Network).post(new Runnable() {
 
 			@Override
@@ -248,9 +247,9 @@ public class FileTransferJob {
 		message.setContentLength(item.mContentLength);
 		message.setData(item.mBuffer);
 		byte[] data = MessageCodecUtil.writeMessage(message);
-		System.out.println("write: " + data.length + "[threadid:"
-				+ Thread.currentThread().getId() + "][name:"
-				+ Thread.currentThread().getName() + "]");
+		System.out.println("write: [length:" + data.length + "][index:"
+				+ item.mIndex + "][threadid:" + Thread.currentThread().getId()
+				+ "][name:" + Thread.currentThread().getName() + "]");
 		mChannel.write(data, (Object) item);
 	}
 
@@ -268,7 +267,6 @@ public class FileTransferJob {
 					return;
 				}
 			} catch (IOException e1) {
-				// TODO Auto-generated catch block
 				e1.printStackTrace();
 			}
 			int bytesRead = -1;
@@ -280,7 +278,7 @@ public class FileTransferJob {
 				 * buffer.length byte data
 				 */
 				bytesRead = mFileInputStream.read(mItem.mBuffer);
-				log("readFile****: " + bytesRead);
+				System.out.println("readFile****: " + bytesRead);
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
@@ -323,7 +321,6 @@ public class FileTransferJob {
 		public void onConnected(AsyncChannelBase channel) {
 
 			Threads.forThread(Threads.Type.IO_Network).post(new Runnable() {
-
 				@Override
 				public void run() {
 					assert (mState == FileTransferState.Connect);
@@ -335,7 +332,6 @@ public class FileTransferJob {
 						return;
 					}
 					sendHeader();
-					mState = FileTransferState.SendHeader;
 				}
 			});
 
@@ -363,9 +359,6 @@ public class FileTransferJob {
 
 			@Override
 			public void run() {
-				System.out.println("onWriteCompleted: " + mLengthHolder
-						+ "[threadid:" + Thread.currentThread().getId()
-						+ "][name:" + Thread.currentThread().getName() + "]");
 				assert (mState == FileTransferState.SendHeader || mState == FileTransferState.SendBody);
 				switch (mState) {
 				case SendHeader:
@@ -375,6 +368,11 @@ public class FileTransferJob {
 					BlockBuffer.Item item = (BlockBuffer.Item) mAttachHolder;
 					item.mState = BlockBufferState.Idle;
 					mSendBlockMarks.onBlockFinished(item.mIndex);
+					System.out.println("onWriteCompleted: [length:"
+							+ mLengthHolder + "][index:" + item.mIndex
+							+ "][threadid:" + Thread.currentThread().getId()
+							+ "][name:" + Thread.currentThread().getName()
+							+ "]");
 					break;
 				default:
 					break;

@@ -28,12 +28,17 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 	private IStreamDecoder mStreamDecoder;
 	private AsyncChannelBase mChannel;
 	private FileTransferHeaderMessage mHeader;
+	// block marks
 	BlockMarks mReceivedBlockMarks;
 	BlockMarks mWriteBlockMarks;
+	// blocks received but have not been written to file
+	private Map<Integer, FileTransferBlockMessage> mReceivedBlocks = new HashMap<Integer, FileTransferBlockMessage>();
+
+	// file and related output stream
 	FileOutputStream mFileOutputStream;
 	File mFile;
+	// client
 	private Client mClient;
-	private Map<Integer, FileTransferBlockMessage> mReceivedBlocks = new HashMap<Integer, FileTransferBlockMessage>();
 
 	public static interface Client {
 		void onProgressChanged(FileReceiveJob job, int progress);
@@ -46,15 +51,17 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 	}
 
 	public FileReceiveJob(AsyncChannelBase channel) {
+		// setup channel
 		mChannel = channel;
 		mChannel.setClient(this);
+		// setup decoders
 		MessageDecoder messageDecoder = new MessageDecoder();
 		messageDecoder.add(FileTransferHeaderMessage.class.getName(),
 				mFileHeaderMessageHandler);
 		messageDecoder.add(FileTransferBlockMessage.class.getName(),
 				mFileBlockMessageHandler);
 		mStreamDecoder = new FrameDecoder(messageDecoder);
-
+		// setup block marker
 		mReceivedBlockMarks = new BlockMarks();
 		mReceivedBlockMarks.setClient(new BlockMarks.Client() {
 			@Override
@@ -109,7 +116,6 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 
 	private void startOnIOThread() {
 		Threads.forThread(Threads.Type.IO_Network).post(new Runnable() {
-
 			@Override
 			public void run() {
 				mChannel.read(null);
@@ -117,6 +123,9 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 		});
 	}
 
+	/*
+	 * Write block to file, run in IO_File Thread
+	 */
 	class WriteBlockRunnable implements Runnable {
 		private ArrayList<FileTransferBlockMessage> mBlocks;
 
@@ -133,12 +142,12 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
-
+				//notify IO_Network Thread write block finished and can read more blocks
 				Threads.forThread(Threads.Type.IO_Network).post(new Runnable() {
-
 					@Override
 					public void run() {
 						mWriteBlockMarks.onBlockFinished(block.getIndex());
+						mReceivedBlocks.remove(block.getIndex());
 					}
 				});
 			}
@@ -168,6 +177,8 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 			} catch (FileNotFoundException e) {
 				e.printStackTrace();
 			}
+			
+			//initialize  block marks on header message
 			mWriteBlockMarks.init((int) mHeader.getmFileLength(),
 					mHeader.getmFileBlockSize());
 			mReceivedBlockMarks.init((int) mHeader.getmFileLength(),
@@ -189,34 +200,41 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 		}
 	};
 
+	/*
+	 * Callbacks of  AsynchronousSocketChannel  are from different thread,
+	 * but we need handle all the decode OP on IO_Network Thread, so just
+	 * post this runnable to IO_Network thread to handle read complete OP
+	 */
 	class ReadCompletedRunnable implements Runnable {
-
 		private AsyncChannelBase mChannelHolder;
 		private byte[] mBufferHolder;
 		private int mLengthHolder;
 		private Object mAttachHolder;
-		
+
 		public ReadCompletedRunnable(AsyncChannelBase channel, byte[] buffer,
-				int length, Object attach)
-		{
+				int length, Object attach) {
 			mChannelHolder = channel;
 			mBufferHolder = buffer;
 			mLengthHolder = length;
 			mAttachHolder = attach;
 		}
+
 		@Override
 		public void run() {
 			log("onReadCompleted: " + mLengthHolder);
+			//do decode and continue read from channel
+			//TODO: judge return value of decode OP, continue read only no error occurs
 			mStreamDecoder.decode(mBufferHolder, 0, mLengthHolder);
 			mChannel.read(null);
 		}
 	}
 
-	// From AsyncChannelBase.Client
+	// From AsyncChannelBase.Client , all the callbacks below are run in kernel thread
 	@Override
 	public boolean onReadCompleted(AsyncChannelBase channel, byte[] buffer,
 			int length, Object attach) {
-		Threads.forThread(Threads.Type.IO_Network).post(new ReadCompletedRunnable(channel, buffer, length, attach));
+		Threads.forThread(Threads.Type.IO_Network).post(
+				new ReadCompletedRunnable(channel, buffer, length, attach));
 		return true;
 	}
 
