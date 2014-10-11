@@ -5,6 +5,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 
 import com.orange.base.ErrorCode;
@@ -185,7 +186,8 @@ public class FileTransferJob {
 				message.setmFileLength(mFile.length());
 				message.setmFileName(mFile.getName());
 				byte[] data = MessageCodecUtil.writeMessage(message);
-				mChannel.write(data, null);
+				mWriteBuffer = ByteBuffer.wrap(data);
+				mChannel.write(data, 0, data.length, null);
 			}
 		});
 	}
@@ -229,6 +231,8 @@ public class FileTransferJob {
 				new ReadFileBlockRunnable(item));
 	}
 
+	private ByteBuffer mWriteBuffer = null;
+
 	private void sendBody() {
 		if (mState == FileTransferState.Finished) {
 			return;
@@ -250,7 +254,8 @@ public class FileTransferJob {
 		System.out.println("write: [length:" + data.length + "][index:"
 				+ item.mIndex + "][threadid:" + Thread.currentThread().getId()
 				+ "][name:" + Thread.currentThread().getName() + "]");
-		mChannel.write(data, (Object) item);
+		mWriteBuffer = ByteBuffer.wrap(data);
+		mChannel.write(data, 0, data.length, (Object) item);
 	}
 
 	private class ReadFileBlockRunnable implements Runnable {
@@ -357,15 +362,36 @@ public class FileTransferJob {
 				mAttachHolder = attach;
 			}
 
+			// if this block has not been fully send, continue to send
+			// the left bytes
+			private boolean checkAndContinueWrite(Object attach) {
+				mWriteBuffer.position(mWriteBuffer.position() + mLengthHolder);
+				if (mWriteBuffer.remaining() > 0) {
+					mChannel.write(mWriteBuffer.array(),
+							mWriteBuffer.position(), mWriteBuffer.remaining(),
+							attach);
+					return true;
+				}
+
+				return false;
+			}
+
 			@Override
 			public void run() {
 				assert (mState == FileTransferState.SendHeader || mState == FileTransferState.SendBody);
 				switch (mState) {
 				case SendHeader:
 					mState = FileTransferState.SendBody;
+					if (checkAndContinueWrite(null)) {
+						return;
+					}
 					break;
 				case SendBody:
 					BlockBuffer.Item item = (BlockBuffer.Item) mAttachHolder;
+
+					if (checkAndContinueWrite(null)) {
+						return;
+					}
 					item.mState = BlockBufferState.Idle;
 					mSendBlockMarks.onBlockFinished(item.mIndex);
 					System.out.println("onWriteCompleted: [length:"

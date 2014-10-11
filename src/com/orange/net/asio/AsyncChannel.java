@@ -91,8 +91,8 @@ public class AsyncChannel implements AsyncChannelBase {
 	}
 
 	@Override
-	public void write(byte[] data, Object attach) {
-		mChannel.write(ByteBuffer.wrap(data), attach,
+	public void write(byte[] data, int offset, int length, Object attach) {
+		mChannel.write(ByteBuffer.wrap(data, offset, length), attach,
 				new CompletionHandler<Integer, Object>() {
 
 					@Override
