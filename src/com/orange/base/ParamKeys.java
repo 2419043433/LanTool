@@ -4,9 +4,10 @@ public enum ParamKeys {
 	Ip,
 	Port,
 	Host,
-	ProcessId,
 	ClientInfo,
 	Path,
 	Value,
 	Message,
+	Address,
+	GUID,
 }

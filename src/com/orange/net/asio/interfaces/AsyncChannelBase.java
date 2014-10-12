@@ -1,5 +1,6 @@
 package com.orange.net.asio.interfaces;
 
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 
 import com.orange.base.ErrorCode;
@@ -29,5 +30,5 @@ public interface AsyncChannelBase {
 	
 	void write(byte[] data, int offset, int length, Object attach);
 	
-	SocketAddress getRemoteAddress();
+	InetSocketAddress getRemoteAddress();
 }

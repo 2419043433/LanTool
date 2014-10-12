@@ -27,10 +27,15 @@ public class AsyncChannelManager implements AsyncServerChannelBase.Client {
 		channel.setClient(mAsyncChannelClient);
 		mChannels.add(channel);
 	}
-
+	
+	@Override
+	public void onStartOk(int port) {
+		// TODO Auto-generated method stub
+		
+	}
 	// asynchronous server channel error, can not accept any more
 	@Override
-	public void onError() {
+	public void onError(ErrorCode code) {
 
 	}
 
@@ -63,4 +68,6 @@ public class AsyncChannelManager implements AsyncServerChannelBase.Client {
 	}
 
 	private AsyncChannelClient mAsyncChannelClient = new AsyncChannelClient();
+
+
 }

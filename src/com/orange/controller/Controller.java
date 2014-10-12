@@ -4,18 +4,23 @@
  */
 package com.orange.controller;
 
+import java.net.InetSocketAddress;
+
 import com.orange.base.ParamKeys;
 import com.orange.base.Params;
 import com.orange.base.thread.Threads;
 import com.orange.client_manage.ClientInfo;
 import com.orange.client_manage.ClientInfoManager;
+import com.orange.client_manage.EndPoint;
 import com.orange.file_transfer.FileReceiveService;
+import com.orange.file_transfer.FileTransferHeaderMessage;
 import com.orange.file_transfer.FileTransferService;
 import com.orange.interfaces.CommandId;
 import com.orange.interfaces.ICommandProcessor;
 import com.orange.interfaces.IMessageHandler;
 import com.orange.interfaces.MessageId;
 import com.orange.net.asio.AsyncChannelFactory;
+import com.orange.net.controller.ControlServerChannel;
 import com.orange.net.heart_beat_service.HeartBeatMessage;
 import com.orange.net.heart_beat_service.HeartBeatService;
 import com.orange.ui.UIManager;
@@ -26,13 +31,19 @@ import com.orange.ui.UIManager;
  */
 public class Controller implements IMessageHandler, ICommandProcessor {
 
+	// multicast ip and port
 	private static final String kIP = "224.0.0.0";
 	private static final int kPort = 6000;
+	// control channel start port
+	private static final int kControlPort = 7000;
+	private static final int kControlChannleBindMaxTryCount = 5;
+
 	UIManager mUiManager;
 	private HeartBeatService mHeartBeatService;
 	private FileTransferService mFileTransferService;
 	private FileReceiveService mFileReceiveService;
 	private ClientInfoManager mClientInfoManager;
+	private ControlServerChannel mControlServerChannel;
 
 	public Controller() {
 		initComponents();
@@ -44,32 +55,29 @@ public class Controller implements IMessageHandler, ICommandProcessor {
 
 		// UI manager
 		mUiManager = new UIManager(this);
-		// heart beat service
-		mHeartBeatService = new HeartBeatService(kIP, kPort);
-		mHeartBeatService.setDelegate(mHeartBeatServiceDelegate);
 
 		mClientInfoManager = new ClientInfoManager();
 		mFileTransferService = new FileTransferService(this);
-		mFileReceiveService = new FileReceiveService(this);
-		mFileReceiveService.setChannelFactory(new AsyncChannelFactory());
+		mControlServerChannel = new ControlServerChannel(this);
 	}
 
 	public void start() {
-		// show main UI
-		mUiManager.processCommand(CommandId.ShowMainFrame, null, null);
-		// start heart beat listen and timer send
-		mHeartBeatService.start();
-		// TODO: should start at appropriate time
-		mFileReceiveService.start();
+		if (mControlServerChannel.start(kControlPort,
+				kControlChannleBindMaxTryCount) < 0) {
+			System.out.println("ControlServerChannel start failed, exit");
+		}
 	}
 
 	private HeartBeatService.Delegate mHeartBeatServiceDelegate = new HeartBeatService.Delegate() {
 		@Override
 		public void onHeartBeatMessageReceived(HeartBeatMessage msg) {
-			ClientInfo clientInfo = new ClientInfo(msg.getIp(), msg.getHost());
+			ClientInfo clientInfo = new ClientInfo(new EndPoint(msg
+					.getAddress().getHostAddress(), msg.getAddress()
+					.getHostName(), msg.getControlPort()), msg.getGUID(),
+					msg.getControlPort());
 			mClientInfoManager.addClient(clientInfo);
-			Params param = Params.obtain().put(ParamKeys.ClientInfo,
-					clientInfo);
+			Params param = Params.obtain()
+					.put(ParamKeys.ClientInfo, clientInfo);
 			mUiManager.processCommand(CommandId.AddMember, param, null);
 		}
 	};
@@ -95,16 +103,57 @@ public class Controller implements IMessageHandler, ICommandProcessor {
 		}
 			break;
 		case OnFileTransferProgressChanged: {
-			ClientInfo clientInfo = (ClientInfo)param.get(ParamKeys.ClientInfo);
+			ClientInfo clientInfo = (ClientInfo) param
+					.get(ParamKeys.ClientInfo);
 			String path = param.getString(ParamKeys.Path);
 			int progress = param.getInt(ParamKeys.Value);
-			//do some check 
-			//notify ui
+			// do some check
+			// notify ui
 			mUiManager.processCommand(CommandId.OnFileTransferProgressChanged,
 					param, result);
 		}
 			break;
 		case OnFileTransferError:
+			break;
+
+		case OnControlChannelStartOK: {
+			// show main UI
+			mUiManager.processCommand(CommandId.ShowMainFrame, null, null);
+
+			// start #HeartBeatService
+			int controlPort = param.getInt(ParamKeys.Port);
+			mHeartBeatService = new HeartBeatService(kIP, kPort, controlPort);
+			mHeartBeatService.setDelegate(mHeartBeatServiceDelegate);
+			mHeartBeatService.start();
+		}
+			break;
+
+		case OnRequestFileTransfer:
+			mUiManager.processCommand(CommandId.OnRequestFileTransfer, param,
+					result);
+			break;
+
+		case DenyFileTransferRequest: {
+			// 1.send deny msg
+		}
+			break;
+		case AcceptFileTransferRequest: {
+			// start file receive service
+			// send accept msg on service start ok
+			if (null == mFileReceiveService) {
+				mFileReceiveService = new FileReceiveService(this);
+				mFileReceiveService
+						.setChannelFactory(new AsyncChannelFactory());
+				int port = mFileReceiveService.start(7000, 5);
+				if (port < 0) {
+					// handle errro;
+				}
+			}
+			mFileReceiveService.processCommand(CommandId.CreateFileReceiveJob,
+					param, result);
+			mControlServerChannel.processCommand(
+					CommandId.AcceptFileTransferRequest, param, result);
+		}
 			break;
 
 		default:
@@ -113,5 +162,4 @@ public class Controller implements IMessageHandler, ICommandProcessor {
 		}
 		return handled;
 	}
-
 }

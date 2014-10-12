@@ -14,6 +14,9 @@ import com.orange.client_manage.ClientInfo;
 import com.orange.net.asio.interfaces.AsyncChannelBase;
 import com.orange.net.asio.interfaces.AsyncChannelFactoryBase;
 import com.orange.net.util.MessageCodecUtil;
+import com.orange.system.SystemInfo;
+import com.orange.system.SystemInfo.Keys;
+import com.orange.util.SystemUtil;
 
 //TODO: add weak semantics
 //currently we just implement small file transfer, huge file transfer should make a new implementation
@@ -168,8 +171,8 @@ public class FileTransferJob {
 			public void run() {
 				mChannel = mChannelFactory.createAsyncChannel();
 				mChannel.setClient(mAsyncChannelClient);
-				mChannel.connect(new InetSocketAddress(mClientInfo.mIp,
-						mClientInfo.mPort));
+				mChannel.connect(new InetSocketAddress(mClientInfo.mEndPoint
+						.getmIp(), mClientInfo.mControlPort));
 				mState = FileTransferState.Connect;
 			}
 		});
@@ -182,9 +185,11 @@ public class FileTransferJob {
 			@Override
 			public void run() {
 				FileTransferHeaderMessage message = new FileTransferHeaderMessage();
-				message.setmFileBlockSize(mBlockSize);
-				message.setmFileLength(mFile.length());
-				message.setmFileName(mFile.getName());
+				message.setFileBlockSize(mBlockSize);
+				message.setFileLength(mFile.length());
+				message.setFileName(mFile.getName());
+				message.setGUID(SystemInfo.getInstance().getString(Keys.GUID));;
+				message.setJobId(SystemUtil.getLUID());
 				byte[] data = MessageCodecUtil.writeMessage(message);
 				mWriteBuffer = ByteBuffer.wrap(data);
 				mChannel.write(data, 0, data.length, null);
@@ -283,7 +288,7 @@ public class FileTransferJob {
 				 * buffer.length byte data
 				 */
 				bytesRead = mFileInputStream.read(mItem.mBuffer);
-			//	System.out.println("readFile****: " + bytesRead);
+				// System.out.println("readFile****: " + bytesRead);
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
@@ -348,7 +353,9 @@ public class FileTransferJob {
 			// mClient.onError(FileTransferJob.this, errorCode, msg, throwable);
 			// may handle error here
 		}
+
 		private int mSumLength = 0;
+
 		class WriteCompletedRunnable implements Runnable {
 
 			private AsyncChannelBase mChannelHolder;
@@ -367,7 +374,15 @@ public class FileTransferJob {
 			private boolean checkAndContinueWrite() {
 				mSumLength += mLengthHolder;
 				mWriteBuffer.position(mWriteBuffer.position() + mLengthHolder);
-				System.out.println("[sumlen:" + mSumLength + "][check:" + (mWriteBuffer.remaining() > 0 ? "#####################true" : "false") + "][position:" + mWriteBuffer.position() + "][write length:" + mLengthHolder + "][remaining;" + mWriteBuffer.remaining() + "]");
+				System.out
+						.println("[sumlen:"
+								+ mSumLength
+								+ "][check:"
+								+ (mWriteBuffer.remaining() > 0 ? "#####################true"
+										: "false") + "][position:"
+								+ mWriteBuffer.position() + "][write length:"
+								+ mLengthHolder + "][remaining;"
+								+ mWriteBuffer.remaining() + "]");
 				if (mWriteBuffer.remaining() > 0) {
 					mChannel.write(mWriteBuffer.array(),
 							mWriteBuffer.position(), mWriteBuffer.remaining(),
@@ -396,11 +411,11 @@ public class FileTransferJob {
 					}
 					item.mState = BlockBufferState.Idle;
 					mSendBlockMarks.onBlockFinished(item.mIndex);
-//					System.out.println("onWriteCompleted: [length:"
-//							+ mLengthHolder + "][index:" + item.mIndex
-//							+ "][threadid:" + Thread.currentThread().getId()
-//							+ "][name:" + Thread.currentThread().getName()
-//							+ "]");
+					// System.out.println("onWriteCompleted: [length:"
+					// + mLengthHolder + "][index:" + item.mIndex
+					// + "][threadid:" + Thread.currentThread().getId()
+					// + "][name:" + Thread.currentThread().getName()
+					// + "]");
 					break;
 				default:
 					break;
@@ -454,9 +469,16 @@ public class FileTransferJob {
 		}
 
 		public Item getFirstReadOKItem() {
+			Item dest = null;
 			for (Item item : mItems) {
 				if (item.mState == BlockBufferState.ReadOK) {
-					return item;
+					if (dest == null) {
+						dest = item;
+					} else {
+						if (item.mIndex < dest.mIndex) {
+							dest = item;
+						}
+					}
 				}
 			}
 

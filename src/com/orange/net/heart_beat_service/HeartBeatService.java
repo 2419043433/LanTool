@@ -2,8 +2,6 @@ package com.orange.net.heart_beat_service;
 
 import java.util.Timer;
 import java.util.TimerTask;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import com.orange.base.thread.IOThread;
 import com.orange.base.thread.Threads;
@@ -27,12 +25,12 @@ public class HeartBeatService implements
 		void onHeartBeatMessageReceived(HeartBeatMessage msg);
 	}
 
-	public HeartBeatService(String ip, int port) {
+	public HeartBeatService(String ip, int port, int controlPort) {
 		mIp = ip;
 		mPort = port;
 		//better by setting it
 		mHeartBeatListenThread = new IOThread();
-		mHeart = new Heart(port);
+		mHeart = new Heart(port, controlPort);
 		mMessageDecoder = new MessageDecoder();
 		setupMessageHandlers();
 		mServer = new MulticastServer(new DatagramPacketDecoder(
@@ -50,8 +48,6 @@ public class HeartBeatService implements
 
 	@Override
 	public void onHeartBeatMessageReceived(HeartBeatMessage msg) {
-		//Logger.getLogger("HeartBeatService").log(Level.INFO, "receive " + msg);
-
 		Threads.forThread(Threads.Type.UI).post(new HeartBeatMessageRunnable(msg));
 	}
 
@@ -73,7 +69,7 @@ public class HeartBeatService implements
 	}
 
 	private void startOnIOThread() {
-		mHeartBeatListenThread.post(new HeartBeatListenCommand(mServer, mIp,
+		mHeartBeatListenThread.post(new HeartBeatListenRunnable(mServer, mIp,
 				mPort));
 		new Timer().scheduleAtFixedRate(new TimerTask() {
 
@@ -84,12 +80,12 @@ public class HeartBeatService implements
 		}, 0, 3000);
 	}
 
-	private class HeartBeatListenCommand implements Runnable {
+	private class HeartBeatListenRunnable implements Runnable {
 		private String mIp;
 		private int mPort;
 		private MulticastServer mHeartBeatServer;
 
-		public HeartBeatListenCommand(MulticastServer server, String ip,
+		public HeartBeatListenRunnable(MulticastServer server, String ip,
 				int port) {
 			mHeartBeatServer = server;
 			mIp = ip;

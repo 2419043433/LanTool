@@ -1,19 +1,25 @@
 package com.orange.client_manage;
 
+import java.net.InetSocketAddress;
+
 public class ClientInfo {
-	public ClientInfo(String ip, String host) {
-		mIp = ip;
-		mHost = host;
+	public ClientInfo(EndPoint endPoint, String clientGUID, int controlPort) {
+		mEndPoint = endPoint;
+		mControlPort = controlPort;
+		mClientGUID = clientGUID;
 	}
 
-	@Override
-	public String toString() {
-		return "ClientInfo [mIp=" + mIp + ", mHost=" + mHost + "]";
+	public EndPoint mEndPoint;
+	// this port should be set by command channel.
+	public int mControlPort = -1;
+	public String mClientGUID;
+
+	public boolean equalsWith(InetSocketAddress other) {
+		return mEndPoint.getmIp().equals(other.getAddress().getHostAddress());
 	}
-
-	public String mIp;
-	public String mHost;
-	//this port should be set by command channel.
-	public int mPort = 7000;
-
+	
+	public boolean equalsWith(String otherGUID)
+	{
+		return mClientGUID.equals(otherGUID);
+	}
 }

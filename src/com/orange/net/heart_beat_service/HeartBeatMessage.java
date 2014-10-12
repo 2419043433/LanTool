@@ -1,50 +1,40 @@
 package com.orange.net.heart_beat_service;
 
+import java.net.InetAddress;
+
 import com.orange.net.interfaces.IMessage;
-import com.orange.util.SystemUtil;
 
 public class HeartBeatMessage implements IMessage {
 	private static final long serialVersionUID = 1L;
-	private String mIp;
-	private String mHost;
-	private long mTimeStamp;
-	private long mProcessId;// just for local multiple-instance communication
+	private InetAddress mAddress;
+	private String mGUID;// just for local multiple-instance communication
 							// test
+	private int mControlPort;// control channel listen port
 
-	public HeartBeatMessage(String ip, String host, long timeStamp) {
-		mIp = ip;
-		mHost = host;
-		mTimeStamp = timeStamp;
-		mProcessId = SystemUtil.getPID();
+	public int getControlPort() {
+		return mControlPort;
 	}
 
-	public String getIp() {
-		return mIp;
+	public void setControlPort(int mControlPort) {
+		this.mControlPort = mControlPort;
 	}
 
-	public void setIp(String mIp) {
-		this.mIp = mIp;
+	public HeartBeatMessage(InetAddress address, String guid, int port) {
+		mAddress = address;
+		mGUID = guid;
+		mControlPort = port;
 	}
 
-	public String getHost() {
-		return mHost;
+	public void setAddress(InetAddress address) {
+		mAddress = address;
 	}
 
-	public void setHost(String mHost) {
-		this.mHost = mHost;
+	public InetAddress getAddress() {
+		return mAddress;
 	}
 
-	public long getTimeStamp() {
-		return mTimeStamp;
-	}
-
-	public void setTimeStamp(long mTimeStamp) {
-		this.mTimeStamp = mTimeStamp;
-	}
-	
-	public long getPID()
-	{
-		return mProcessId;
+	public String getGUID() {
+		return mGUID;
 	}
 
 	public static long getSerialversionuid() {
@@ -53,8 +43,7 @@ public class HeartBeatMessage implements IMessage {
 
 	@Override
 	public String toString() {
-		return "HeartBeatMessage [mIp=" + mIp + ", mHost=" + mHost
-				+ ", mTimeStamp=" + mTimeStamp + "]";
+		return "HeartBeatMessage [mAddress=" + mAddress + ", mGUID="
+				+ mGUID + ", mControlPort=" + mControlPort + "]";
 	}
-
 }

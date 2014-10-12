@@ -27,6 +27,10 @@ public class Params {
 		return (Integer) get(k);
 	}
 
+	public Long getLong(ParamKeys k) {
+		return (Long) get(k);
+	}
+
 	public static Params obtain() {
 		return new Params();
 	}

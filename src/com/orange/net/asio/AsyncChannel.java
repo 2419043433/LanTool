@@ -1,6 +1,7 @@
 package com.orange.net.asio;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousSocketChannel;
@@ -112,9 +113,9 @@ public class AsyncChannel implements AsyncChannelBase {
 	}
 
 	@Override
-	public SocketAddress getRemoteAddress() {
+	public InetSocketAddress getRemoteAddress() {
 		try {
-			return mChannel.getRemoteAddress();
+			return (InetSocketAddress) mChannel.getRemoteAddress();
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();

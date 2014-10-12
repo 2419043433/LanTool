@@ -28,6 +28,7 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 	private IStreamDecoder mStreamDecoder;
 	private AsyncChannelBase mChannel;
 	private FileTransferHeaderMessage mHeader;
+	private String mGUID;
 	// block marks
 	BlockMarks mReceivedBlockMarks;
 	BlockMarks mWriteBlockMarks;
@@ -45,15 +46,33 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 
 		void onError(FileReceiveJob job);
 	}
+	
+	public void setHeader(FileTransferHeaderMessage header)
+	{
+		mHeader = header;
+	}
 
+	public void setGUID(String guid)
+	{
+		mGUID = guid;
+	}
 	private void log(String info) {
 		// Logger.getLogger(TAG).log(Level.INFO, info);
 	}
 
+	public void bind(AsyncChannelBase channel) {
+		if (null != channel) {
+			mChannel = channel;
+			mChannel.setClient(this);
+		}
+	}
+
 	public FileReceiveJob(AsyncChannelBase channel) {
 		// setup channel
-		mChannel = channel;
-		mChannel.setClient(this);
+		if (null != channel) {
+			mChannel = channel;
+			mChannel.setClient(this);
+		}
 		// setup decoders
 		MessageDecoder messageDecoder = new MessageDecoder();
 		messageDecoder.add(FileTransferHeaderMessage.class.getName(),
@@ -75,7 +94,8 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 
 			@Override
 			public void onRangeFinished(int start, int end) {
-				System.out.println("receive block[" + (start + 1) + ":" + end + "]");
+				System.out.println("receive block[" + (start + 1) + ":" + end
+						+ "]");
 				ArrayList<FileTransferBlockMessage> toWrite = new ArrayList<FileTransferBlockMessage>();
 				for (int i = start + 1; i <= end; ++i) {
 					toWrite.add(mReceivedBlocks.get(i));
@@ -137,19 +157,22 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 		@Override
 		public void run() {
 			for (FileTransferBlockMessage block : mBlocks) {
-				//System.out.println("write block start : " + block.getIndex());
+				// System.out.println("write block start : " +
+				// block.getIndex());
 				try {
 					mFileOutputStream.write(block.getData(), 0,
 							block.getContentLength());
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
-				
-				//notify IO_Network Thread write block finished and can read more blocks
+
+				// notify IO_Network Thread write block finished and can read
+				// more blocks
 				Threads.forThread(Threads.Type.IO_Network).post(new Runnable() {
 					@Override
 					public void run() {
-						//System.out.println("write block finished : " + block.getIndex());
+						// System.out.println("write block finished : " +
+						// block.getIndex());
 						mWriteBlockMarks.onBlockFinished(block.getIndex());
 						mReceivedBlocks.remove(block.getIndex());
 					}
@@ -174,19 +197,19 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 			}
 			// temporary for this path, TODO: let user choose use default or
 			// select a new path
-			String path = "/home/wangli/Documents/" + mHeader.getmFileName();
+			String path = "/home/wangli/Documents/" + mHeader.getFileName();
 			mFile = new File(path);
 			try {
 				mFileOutputStream = new FileOutputStream(mFile);
 			} catch (FileNotFoundException e) {
 				e.printStackTrace();
 			}
-			
-			//initialize  block marks on header message
-			mWriteBlockMarks.init((int) mHeader.getmFileLength(),
-					mHeader.getmFileBlockSize());
-			mReceivedBlockMarks.init((int) mHeader.getmFileLength(),
-					mHeader.getmFileBlockSize());
+
+			// initialize block marks on header message
+			mWriteBlockMarks.init((int) mHeader.getFileLength(),
+					mHeader.getFileBlockSize());
+			mReceivedBlockMarks.init((int) mHeader.getFileLength(),
+					mHeader.getFileBlockSize());
 			return true;
 		}
 	};
@@ -199,18 +222,20 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 				return false;
 			}
 			mReceivedBlocks.put(message.getIndex(), message);
-			System.out.println("receive block:" + message.getIndex() + " block count:" + mReceivedBlockMarks.getBlockNum());
+			System.out.println("receive block:" + message.getIndex()
+					+ " block count:" + mReceivedBlockMarks.getBlockNum());
 			mReceivedBlockMarks.onBlockFinished(message.getIndex());
 			return true;
 		}
 	};
 
 	/*
-	 * Callbacks of  AsynchronousSocketChannel  are from different thread,
-	 * but we need handle all the decode OP on IO_Network Thread, so just
-	 * post this runnable to IO_Network thread to handle read complete OP
+	 * Callbacks of AsynchronousSocketChannel are from different thread, but we
+	 * need handle all the decode OP on IO_Network Thread, so just post this
+	 * runnable to IO_Network thread to handle read complete OP
 	 */
 	private int sumLength = 0;
+
 	class ReadCompletedRunnable implements Runnable {
 		private AsyncChannelBase mChannelHolder;
 		private byte[] mBufferHolder;
@@ -228,19 +253,21 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 		@Override
 		public void run() {
 			log("onReadCompleted: " + mLengthHolder);
-			//do decode and continue read from channel
-			//TODO: judge return value of decode OP, continue read only no error occurs
+			// do decode and continue read from channel
+			// TODO: judge return value of decode OP, continue read only no
+			// error occurs
 			sumLength += mLengthHolder;
-			if(mHeader != null)
-			{
-			System.out.println("receive:" + sumLength + " file length:" + mHeader.getmFileLength());
+			if (mHeader != null) {
+				System.out.println("receive:" + sumLength + " file length:"
+						+ mHeader.getFileLength());
 			}
 			mStreamDecoder.decode(mBufferHolder, 0, mLengthHolder);
 			mChannel.read(null);
 		}
 	}
 
-	// From AsyncChannelBase.Client , all the callbacks below are run in kernel thread
+	// From AsyncChannelBase.Client , all the callbacks below are run in kernel
+	// thread
 	@Override
 	public boolean onReadCompleted(AsyncChannelBase channel, byte[] buffer,
 			int length, Object attach) {

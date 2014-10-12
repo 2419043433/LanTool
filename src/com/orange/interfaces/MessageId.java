@@ -6,4 +6,8 @@ public enum MessageId {
 	OnFileTransferProgressChanged,
 	OnFileTransferError,
 	OnRequestFileTransfer,
+	DenyFileTransferRequest,
+	AcceptFileTransferRequest,
+	OnControlChannelStartOK,
+	OnFileReceivedServiceStartOk,
 }

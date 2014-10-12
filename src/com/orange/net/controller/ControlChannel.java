@@ -1,6 +1,6 @@
 package com.orange.net.controller;
 
-import java.net.SocketAddress;
+import java.net.InetSocketAddress;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -105,7 +105,7 @@ public class ControlChannel implements AsyncChannelBase.Client {
 
 	}
 	
-	public SocketAddress getRemoteAddress()
+	public InetSocketAddress getRemoteAddress()
 	{
 		return mChannel.getRemoteAddress();
 	}

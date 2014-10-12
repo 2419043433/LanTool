@@ -8,6 +8,8 @@ public enum ErrorCode {
 	ErrorFileWrite,
 	
 	ErrorNetwork,
+	ErrorNetworkAcceptFailed,
+	ErrorNetworkPortAlreadyOccupied,
 	ErrorNetworkConnect,
 	ErrorNetworkDisconnect,
 	ErrorNetworkRead,

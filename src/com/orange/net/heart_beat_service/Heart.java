@@ -6,18 +6,18 @@ import java.net.InetAddress;
 import java.net.MulticastSocket;
 
 import com.orange.net.util.MessageCodecUtil;
+import com.orange.util.SystemUtil;
 
 public class Heart {
 	private InetAddress mAddress;
 	private DatagramPacket mPacket;
 	private MulticastSocket mSocket;
 
-	public Heart(int port) {
+	public Heart(int port, int controlPort) {
 		try {
 			mAddress = InetAddress.getLocalHost();
-			HeartBeatMessage heartBeatMessage = new HeartBeatMessage(
-					mAddress.getHostAddress(), mAddress.getHostName(),
-					System.currentTimeMillis());
+			HeartBeatMessage heartBeatMessage = new HeartBeatMessage(mAddress,
+					SystemUtil.getGUID(), controlPort);
 			byte[] bytes = MessageCodecUtil.writeMessage(heartBeatMessage);
 			mPacket = new DatagramPacket(bytes, bytes.length, mAddress, port);
 			mSocket = new MulticastSocket();

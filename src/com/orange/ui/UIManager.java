@@ -1,11 +1,16 @@
 package com.orange.ui;
 
+import java.net.InetSocketAddress;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Map.Entry;
+
+import javax.swing.JOptionPane;
 
 import com.orange.base.ParamKeys;
 import com.orange.base.Params;
 import com.orange.client_manage.ClientInfo;
+import com.orange.file_transfer.FileTransferHeaderMessage;
 import com.orange.interfaces.CommandId;
 import com.orange.interfaces.ICommandProcessor;
 import com.orange.interfaces.IMessageHandler;
@@ -51,6 +56,18 @@ public class UIManager implements ICommandProcessor, IMessageHandler {
 		}
 	}
 
+	private FileTransferWidget getFileTransferWidget(String guid) {
+		for (Entry<ClientInfo, FileTransferWidget> entry : mClients.entrySet()) {
+
+			ClientInfo key = entry.getKey();
+			if (key.equalsWith(guid)) {
+				return entry.getValue();
+			}
+		}
+
+		return null;
+	}
+
 	@Override
 	public boolean handleMessage(MessageId id, Params param, Params result) {
 		boolean ret = true;
@@ -87,7 +104,34 @@ public class UIManager implements ICommandProcessor, IMessageHandler {
 			if (null != widget) {
 				widget.processCommand(id, param, result);
 			}
+		}
+			break;
+		case OnRequestFileTransfer: {
+			InetSocketAddress remoteAddress = (InetSocketAddress) param
+					.get(ParamKeys.Address);
+			String guid = param.getString(ParamKeys.GUID);
+			FileTransferHeaderMessage msg = (FileTransferHeaderMessage) param
+					.get(ParamKeys.Message);
+			StringBuilder sb = new StringBuilder();
+			sb.append("[IP:");
+			sb.append(remoteAddress.getHostString());
+			sb.append("]\n[Host:");
+			sb.append(remoteAddress.getHostName());
+			sb.append("]\n[ProcessId:");
+			sb.append(guid);
+			sb.append("]\n want to send \n[");
+			sb.append(msg.getFileName());
+			sb.append(" ");
+			sb.append(msg.getFileLength());
+			sb.append(" \nto you,do you want to accept this file ?");
 
+			int option = JOptionPane.showConfirmDialog(null, sb.toString(),
+					"文件接收提示！", JOptionPane.YES_NO_OPTION);
+			mMessageHandler
+					.handleMessage(
+							option == JOptionPane.YES_OPTION ? MessageId.AcceptFileTransferRequest
+									: MessageId.DenyFileTransferRequest, param,
+							result);
 		}
 			break;
 
