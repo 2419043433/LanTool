@@ -65,6 +65,11 @@ public class BlockMarks {
 			mClient.onAllFinished();
 		}
 	}
+	
+	int getBlockNum()
+	{
+		return mBlockNum;
+	}
 
 	public void writeObject(ObjectOutputStream stream) {
 		try {

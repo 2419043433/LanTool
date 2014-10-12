@@ -283,7 +283,7 @@ public class FileTransferJob {
 				 * buffer.length byte data
 				 */
 				bytesRead = mFileInputStream.read(mItem.mBuffer);
-				System.out.println("readFile****: " + bytesRead);
+			//	System.out.println("readFile****: " + bytesRead);
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
@@ -348,7 +348,7 @@ public class FileTransferJob {
 			// mClient.onError(FileTransferJob.this, errorCode, msg, throwable);
 			// may handle error here
 		}
-
+		private int mSumLength = 0;
 		class WriteCompletedRunnable implements Runnable {
 
 			private AsyncChannelBase mChannelHolder;
@@ -364,15 +364,17 @@ public class FileTransferJob {
 
 			// if this block has not been fully send, continue to send
 			// the left bytes
-			private boolean checkAndContinueWrite(Object attach) {
+			private boolean checkAndContinueWrite() {
+				mSumLength += mLengthHolder;
 				mWriteBuffer.position(mWriteBuffer.position() + mLengthHolder);
+				System.out.println("[sumlen:" + mSumLength + "][check:" + (mWriteBuffer.remaining() > 0 ? "#####################true" : "false") + "][position:" + mWriteBuffer.position() + "][write length:" + mLengthHolder + "][remaining;" + mWriteBuffer.remaining() + "]");
 				if (mWriteBuffer.remaining() > 0) {
 					mChannel.write(mWriteBuffer.array(),
 							mWriteBuffer.position(), mWriteBuffer.remaining(),
-							attach);
+							mAttachHolder);
 					return true;
 				}
-
+				mWriteBuffer.position(0);
 				return false;
 			}
 
@@ -381,24 +383,24 @@ public class FileTransferJob {
 				assert (mState == FileTransferState.SendHeader || mState == FileTransferState.SendBody);
 				switch (mState) {
 				case SendHeader:
-					mState = FileTransferState.SendBody;
-					if (checkAndContinueWrite(null)) {
+					if (checkAndContinueWrite()) {
 						return;
 					}
+					mState = FileTransferState.SendBody;
 					break;
 				case SendBody:
 					BlockBuffer.Item item = (BlockBuffer.Item) mAttachHolder;
 
-					if (checkAndContinueWrite(null)) {
+					if (checkAndContinueWrite()) {
 						return;
 					}
 					item.mState = BlockBufferState.Idle;
 					mSendBlockMarks.onBlockFinished(item.mIndex);
-					System.out.println("onWriteCompleted: [length:"
-							+ mLengthHolder + "][index:" + item.mIndex
-							+ "][threadid:" + Thread.currentThread().getId()
-							+ "][name:" + Thread.currentThread().getName()
-							+ "]");
+//					System.out.println("onWriteCompleted: [length:"
+//							+ mLengthHolder + "][index:" + item.mIndex
+//							+ "][threadid:" + Thread.currentThread().getId()
+//							+ "][name:" + Thread.currentThread().getName()
+//							+ "]");
 					break;
 				default:
 					break;

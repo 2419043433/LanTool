@@ -75,6 +75,7 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 
 			@Override
 			public void onRangeFinished(int start, int end) {
+				System.out.println("receive block[" + (start + 1) + ":" + end + "]");
 				ArrayList<FileTransferBlockMessage> toWrite = new ArrayList<FileTransferBlockMessage>();
 				for (int i = start + 1; i <= end; ++i) {
 					toWrite.add(mReceivedBlocks.get(i));
@@ -136,16 +137,19 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 		@Override
 		public void run() {
 			for (FileTransferBlockMessage block : mBlocks) {
+				//System.out.println("write block start : " + block.getIndex());
 				try {
 					mFileOutputStream.write(block.getData(), 0,
 							block.getContentLength());
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
+				
 				//notify IO_Network Thread write block finished and can read more blocks
 				Threads.forThread(Threads.Type.IO_Network).post(new Runnable() {
 					@Override
 					public void run() {
+						//System.out.println("write block finished : " + block.getIndex());
 						mWriteBlockMarks.onBlockFinished(block.getIndex());
 						mReceivedBlocks.remove(block.getIndex());
 					}
@@ -195,6 +199,7 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 				return false;
 			}
 			mReceivedBlocks.put(message.getIndex(), message);
+			System.out.println("receive block:" + message.getIndex() + " block count:" + mReceivedBlockMarks.getBlockNum());
 			mReceivedBlockMarks.onBlockFinished(message.getIndex());
 			return true;
 		}
@@ -205,6 +210,7 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 	 * but we need handle all the decode OP on IO_Network Thread, so just
 	 * post this runnable to IO_Network thread to handle read complete OP
 	 */
+	private int sumLength = 0;
 	class ReadCompletedRunnable implements Runnable {
 		private AsyncChannelBase mChannelHolder;
 		private byte[] mBufferHolder;
@@ -224,6 +230,11 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 			log("onReadCompleted: " + mLengthHolder);
 			//do decode and continue read from channel
 			//TODO: judge return value of decode OP, continue read only no error occurs
+			sumLength += mLengthHolder;
+			if(mHeader != null)
+			{
+			System.out.println("receive:" + sumLength + " file length:" + mHeader.getmFileLength());
+			}
 			mStreamDecoder.decode(mBufferHolder, 0, mLengthHolder);
 			mChannel.read(null);
 		}
