@@ -10,7 +10,7 @@ public enum CommandId {
 	ShowSendFileWidget,
 	SendFile,
 	OnFileTransferProgressChanged,
-	OnRequestFileTransfer,
+	OnFileTransferRequest,
 	CreateFileReceiveJob,
 	StartFileReceiveJob,
 	StartAllWaitingFileTransferJob,

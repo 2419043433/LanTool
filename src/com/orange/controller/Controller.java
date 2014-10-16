@@ -57,7 +57,6 @@ public class Controller implements IMessageHandler, ICommandProcessor {
 		mUiManager = new UIManager(this);
 
 		mClientInfoManager = new ClientInfoManager();
-		mFileTransferService = new FileTransferService(this);
 		mControlServerChannel = new ControlServerChannel(this);
 	}
 
@@ -128,16 +127,17 @@ public class Controller implements IMessageHandler, ICommandProcessor {
 		}
 			break;
 
-		case OnRequestFileTransfer:
-			mUiManager.processCommand(CommandId.OnRequestFileTransfer, param,
+		case OnFileTransferRequest:
+			mUiManager.processCommand(CommandId.OnFileTransferRequest, param,
 					result);
 			break;
 
-		case DenyFileTransferRequest: {
+		case OnDenyFileTransferRequest: {
 			// 1.send deny msg
 		}
 			break;
-		case AcceptFileTransferRequest: {
+		// on others request
+		case OnAcceptFileTransferRequest: {
 			// start file receive service
 			// send accept msg on service start ok
 			if (null == mFileReceiveService) {
@@ -153,6 +153,15 @@ public class Controller implements IMessageHandler, ICommandProcessor {
 					param, result);
 			mControlServerChannel.processCommand(
 					CommandId.AcceptFileTransferRequest, param, result);
+		}
+			break;
+		// my request is accepted
+		case OnFileTransferRequestAccepted: {
+			if(null == mFileTransferService)
+			{
+				mFileTransferService = new FileTransferService(this);
+				mFileTransferService.startFileTransfer(param);
+			}
 		}
 			break;
 

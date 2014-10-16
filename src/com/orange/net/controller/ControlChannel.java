@@ -19,10 +19,16 @@ public class ControlChannel implements AsyncChannelBase.Client {
 	private AsyncChannelBase mChannel;
 	private IStreamDecoder mStreamDecoder;
 	private Client mClient;
+	private String mGUID;
 
 	public static interface Client {
 		void onFileTransferRequest(ControlChannel channel,
 				FileTransferHeaderMessage msg);
+
+		void onClientIdentify(ControlChannel channel, IdentifyMessage msg);
+
+		void onAcceptFileTransferRequest(ControlChannel channel,
+				AcceptFileTransfer_ResponseMessage msg);
 	}
 
 	public ControlChannel(AsyncChannelBase channel) {
@@ -32,9 +38,23 @@ public class ControlChannel implements AsyncChannelBase.Client {
 		// add request(file or other[video, audio]) handler
 		messageDecoder.add(FileTransferHeaderMessage.class.getName(),
 				mFileHeaderMessageHandler);
+		messageDecoder.add(IdentifyMessage.class.getName(),
+				mIdentifyMessageHandler);
+		messageDecoder.add(AcceptFileTransfer_ResponseMessage.class.getName(),
+				mAcceptFileTransferMessageHandler);
 
 		mStreamDecoder = new FrameDecoder(messageDecoder);
 
+	}
+	
+	public void setGUID(String guid)
+	{
+		mGUID = guid;
+	}
+	
+	public String getGUID()
+	{
+		return mGUID;
 	}
 
 	public void setClient(Client client) {
@@ -43,6 +63,14 @@ public class ControlChannel implements AsyncChannelBase.Client {
 
 	public void start() {
 		startOnIOThread();
+	}
+
+	public void write(IMessage msg) {
+		// serialize and send
+		// TODO: add serialize logic, add mechanism to ensure data is sent ok
+		byte[] data = MessageCodecUtil.writeMessage(msg);
+		mChannel.write(data, 0, data.length, null);
+
 	}
 
 	private void startOnIOThread() {
@@ -55,6 +83,7 @@ public class ControlChannel implements AsyncChannelBase.Client {
 		});
 	}
 
+	// TODO: make it as template
 	private com.orange.net.interfaces.IMessageHandler mFileHeaderMessageHandler = new com.orange.net.interfaces.IMessageHandler() {
 
 		@Override
@@ -65,11 +94,50 @@ public class ControlChannel implements AsyncChannelBase.Client {
 				return false;
 			}
 			Threads.forThread(Threads.Type.UI).post(new Runnable() {
-
 				@Override
 				public void run() {
 					mClient.onFileTransferRequest(ControlChannel.this,
 							requestMessage);
+				}
+			});
+			return true;
+		}
+	};
+
+	private com.orange.net.interfaces.IMessageHandler mIdentifyMessageHandler = new com.orange.net.interfaces.IMessageHandler() {
+
+		@Override
+		public boolean handleMessage(IMessage msg) {
+			IdentifyMessage requestMessage = MessageCodecUtil.convert(msg);
+			if (null == requestMessage) {
+				return false;
+			}
+			Threads.forThread(Threads.Type.UI).post(new Runnable() {
+				@Override
+				public void run() {
+					ControlChannel.this.setGUID(requestMessage.getmGUID());
+					mClient.onClientIdentify(ControlChannel.this,
+							requestMessage);
+				}
+			});
+			return true;
+		}
+	};
+
+	private com.orange.net.interfaces.IMessageHandler mAcceptFileTransferMessageHandler = new com.orange.net.interfaces.IMessageHandler() {
+
+		@Override
+		public boolean handleMessage(IMessage msg) {
+			AcceptFileTransfer_ResponseMessage message = MessageCodecUtil
+					.convert(msg);
+			if (null == message) {
+				return false;
+			}
+			Threads.forThread(Threads.Type.UI).post(new Runnable() {
+				@Override
+				public void run() {
+					mClient.onAcceptFileTransferRequest(ControlChannel.this,
+							message);
 				}
 			});
 			return true;
@@ -104,9 +172,8 @@ public class ControlChannel implements AsyncChannelBase.Client {
 		// TODO Auto-generated method stub
 
 	}
-	
-	public InetSocketAddress getRemoteAddress()
-	{
+
+	public InetSocketAddress getRemoteAddress() {
 		return mChannel.getRemoteAddress();
 	}
 

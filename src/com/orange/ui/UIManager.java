@@ -106,7 +106,7 @@ public class UIManager implements ICommandProcessor, IMessageHandler {
 			}
 		}
 			break;
-		case OnRequestFileTransfer: {
+		case OnFileTransferRequest: {
 			InetSocketAddress remoteAddress = (InetSocketAddress) param
 					.get(ParamKeys.Address);
 			String guid = param.getString(ParamKeys.GUID);
@@ -129,8 +129,8 @@ public class UIManager implements ICommandProcessor, IMessageHandler {
 					"文件接收提示！", JOptionPane.YES_NO_OPTION);
 			mMessageHandler
 					.handleMessage(
-							option == JOptionPane.YES_OPTION ? MessageId.AcceptFileTransferRequest
-									: MessageId.DenyFileTransferRequest, param,
+							option == JOptionPane.YES_OPTION ? MessageId.OnAcceptFileTransferRequest
+									: MessageId.OnDenyFileTransferRequest, param,
 							result);
 		}
 			break;

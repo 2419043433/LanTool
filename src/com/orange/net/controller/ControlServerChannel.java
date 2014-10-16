@@ -1,15 +1,15 @@
 package com.orange.net.controller;
 
 import java.net.InetSocketAddress;
+import java.nio.channels.Channel;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
-
-import javax.swing.JOptionPane;
 
 import com.orange.base.ErrorCode;
 import com.orange.base.ParamKeys;
 import com.orange.base.Params;
-import com.orange.client_manage.ClientInfo;
 import com.orange.file_transfer.FileTransferHeaderMessage;
 import com.orange.interfaces.CommandId;
 import com.orange.interfaces.ICommandProcessor;
@@ -19,12 +19,12 @@ import com.orange.net.asio.AsyncChannelFactory;
 import com.orange.net.asio.interfaces.AsyncChannelBase;
 import com.orange.net.asio.interfaces.AsyncChannelFactoryBase;
 import com.orange.net.asio.interfaces.AsyncServerChannelBase;
-import com.orange.ui.desktop.FileTransferWidget;
 
 public class ControlServerChannel implements ICommandProcessor {
 	private IMessageHandler mMessageHandler;
 	private AsyncChannelFactoryBase mChannelFactory;
-	private Set<ControlChannel> mChannels = new HashSet<ControlChannel>();
+	private Map<String, ControlChannel> mChannels = new HashMap<String, ControlChannel>();
+	private Set<ControlChannel> mWaitingChannels = new HashSet<ControlChannel>();
 
 	public ControlServerChannel(IMessageHandler handler) {
 		mMessageHandler = handler;
@@ -60,8 +60,24 @@ public class ControlServerChannel implements ICommandProcessor {
 					.put(ParamKeys.Address, remoteAddress)
 					.put(ParamKeys.Message, msg)
 					.put(ParamKeys.GUID, msg.getGUID());
-			mMessageHandler.handleMessage(MessageId.OnRequestFileTransfer,
+			mMessageHandler.handleMessage(MessageId.OnFileTransferRequest,
 					param, null);
+		}
+
+		@Override
+		public void onClientIdentify(ControlChannel channel, IdentifyMessage msg) {
+			assert(mWaitingChannels.contains(channel));
+			mChannels.put(msg.getmGUID(), channel);
+			mWaitingChannels.remove(channel);
+		}
+
+		@Override
+		public void onAcceptFileTransferRequest(ControlChannel channel,
+				AcceptFileTransfer_ResponseMessage msg) {
+			Params param = Params.obtain().put(ParamKeys.JobID, msg.getJobId()).put(ParamKeys.GUID, channel.getGUID());
+			mMessageHandler.handleMessage(MessageId.OnFileTransferRequestAccepted,
+					param, null);
+			
 		}
 	};
 
@@ -76,7 +92,7 @@ public class ControlServerChannel implements ICommandProcessor {
 		public void onAccept(AsyncChannelBase channel) {
 			ControlChannel controlChannel = new ControlChannel(channel);
 			controlChannel.setClient(mControlChannelClient);
-			mChannels.add(controlChannel);
+			mWaitingChannels.add(controlChannel);
 		}
 
 		@Override
@@ -99,6 +115,9 @@ public class ControlServerChannel implements ICommandProcessor {
 					.get(ParamKeys.Message);
 			AcceptFileTransfer_ResponseMessage response = new AcceptFileTransfer_ResponseMessage();
 			response.setJobId(msg.getJobId());
+			ControlChannel channel = mChannels.get(guid);
+			assert(null != channel);
+			channel.write(response);
 		}
 			break;
 

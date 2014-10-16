@@ -9,5 +9,6 @@ public enum ParamKeys {
 	Value,
 	Message,
 	Address,
-	GUID,
+	GUID,//TODO: rename it to ClientId
+	JobID,
 }
