@@ -29,5 +29,9 @@ public class EndPoint {
 	public void setmPort(int mPort) {
 		this.mPort = mPort;
 	}
-	
+	@Override
+	public String toString() {
+		return "EndPoint [mIp=" + mIp + ", mHost=" + mHost + ", mPort=" + mPort
+				+ "]";
+	}
 }

@@ -28,6 +28,8 @@ import com.orange.interfaces.CommandId;
 import com.orange.interfaces.ICommandProcessor;
 import com.orange.interfaces.IMessageHandler;
 import com.orange.interfaces.MessageId;
+import com.orange.system.SystemInfo;
+import com.orange.system.SystemInfo.Keys;
 
 /**
  * 
@@ -125,10 +127,13 @@ public class MainFrame extends javax.swing.JFrame implements ICommandProcessor {
 			public void actionPerformed(ActionEvent e) {
 				if (e.getActionCommand().equals("send_file")) {
 					TreePath path = mTree.getSelectionPath();
-					DefaultMutableTreeNode node = (DefaultMutableTreeNode)path.getLastPathComponent();
-					ClientInfo info = (ClientInfo)node.getUserObject();
-					Params param = Params.obtain().put(ParamKeys.ClientInfo, info);
-					mMessageHandler.handleMessage(MessageId.ShowFileTransferWidget, param, null);
+					DefaultMutableTreeNode node = (DefaultMutableTreeNode) path
+							.getLastPathComponent();
+					ClientInfo info = (ClientInfo) node.getUserObject();
+					Params param = Params.obtain().put(ParamKeys.ClientInfo,
+							info);
+					mMessageHandler.handleMessage(
+							MessageId.ShowFileTransferWidget, param, null);
 				}
 			}
 		});
@@ -137,13 +142,31 @@ public class MainFrame extends javax.swing.JFrame implements ICommandProcessor {
 
 	private MouseAdapter mTreeMouseAdapter = new MouseAdapter() {
 		public void mouseReleased(MouseEvent e) {
-			if (e.getButton() == MouseEvent.BUTTON3) {
+			switch (e.getButton()) {
+			case MouseEvent.BUTTON3: {
 				TreePath treePath = mTree
 						.getPathForLocation(e.getX(), e.getY());
 				mTree.setSelectionPath(treePath);
 
 				mTreeMenu.add(mTreeMenu_TransferFile);
 				mTreeMenu.show(e.getComponent(), e.getX(), e.getY());
+			}
+				break;
+			case MouseEvent.BUTTON1: {
+				//double click
+				if (e.getClickCount() == 2) {
+					TreePath path = mTree.getSelectionPath();
+					DefaultMutableTreeNode node = (DefaultMutableTreeNode) path
+							.getLastPathComponent();
+					ClientInfo info = (ClientInfo) node.getUserObject();
+					Params param = Params.obtain().put(ParamKeys.ClientInfo,
+							info);
+					mMessageHandler.handleMessage(MessageId.ShowOneOneChatWidget, param, null);
+				}
+			}
+				break;
+			default:
+				break;
 			}
 		}
 	};

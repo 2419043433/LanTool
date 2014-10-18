@@ -3,6 +3,12 @@ package com.orange.client_manage;
 import java.net.InetSocketAddress;
 
 public class ClientInfo {
+	@Override
+	public String toString() {
+		return "ClientInfo [mEndPoint=" + mEndPoint + ", mControlPort="
+				+ mControlPort + ", mClientGUID=" + mClientGUID + "]";
+	}
+
 	public ClientInfo(EndPoint endPoint, String clientGUID, int controlPort) {
 		mEndPoint = endPoint;
 		mControlPort = controlPort;

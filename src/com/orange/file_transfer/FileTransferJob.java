@@ -52,7 +52,7 @@ public class FileTransferJob {
 	private boolean mIsReadFinished = false;
 
 	private enum FileTransferState {
-		Init, Connect, ReadHeader, SendHeader, ReadBody, SendBody, Finished
+		None, Init, Connect, ReadHeader, SendHeader, ReadBody, SendBody, Finished
 	}
 
 	private void log(String info) {
@@ -60,7 +60,7 @@ public class FileTransferJob {
 	}
 
 	public FileTransferJob() {
-		mState = FileTransferState.Init;
+		mState = FileTransferState.None;
 
 		mSendBlockMarks = new BlockMarks();
 		mSendBlockMarks.setClient(new BlockMarks.Client() {
@@ -134,6 +134,7 @@ public class FileTransferJob {
 		// transfer strategy
 		mSendBlockMarks.init((int) mFile.length(), mBlockSize);
 		mReadBlockMarks.init((int) mFile.length(), mBlockSize);
+		mState = FileTransferState.Init;
 	}
 
 	public String getFilePath() {

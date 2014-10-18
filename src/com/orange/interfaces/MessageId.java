@@ -12,4 +12,6 @@ public enum MessageId {
 	OnFileReceivedServiceStartOk,
 	OnFileTransferRequestAccepted,
 	OnFileTransferRequestDenied,
+	
+	ShowOneOneChatWidget,
 }

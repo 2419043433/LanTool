@@ -1,10 +1,8 @@
 /*
- * To change this template, choose Tools | Templates
+6 * To change this template, choose Tools | Templates
  * and open the template in the editor.
  */
 package com.orange.controller;
-
-import java.net.InetSocketAddress;
 
 import com.orange.base.ParamKeys;
 import com.orange.base.Params;
@@ -13,7 +11,6 @@ import com.orange.client_manage.ClientInfo;
 import com.orange.client_manage.ClientInfoManager;
 import com.orange.client_manage.EndPoint;
 import com.orange.file_transfer.FileReceiveService;
-import com.orange.file_transfer.FileTransferHeaderMessage;
 import com.orange.file_transfer.FileTransferService;
 import com.orange.interfaces.CommandId;
 import com.orange.interfaces.ICommandProcessor;
@@ -23,7 +20,10 @@ import com.orange.net.asio.AsyncChannelFactory;
 import com.orange.net.controller.ControlServerChannel;
 import com.orange.net.heart_beat_service.HeartBeatMessage;
 import com.orange.net.heart_beat_service.HeartBeatService;
+import com.orange.system.SystemInfo;
+import com.orange.system.SystemInfo.Keys;
 import com.orange.ui.UIManager;
+import com.orange.util.SystemUtil;
 
 /**
  * 
@@ -52,6 +52,9 @@ public class Controller implements IMessageHandler, ICommandProcessor {
 	private void initComponents() {
 		// threads
 		Threads.init();
+
+		// system information
+		SystemInfo.getInstance().put(Keys.GUID, SystemUtil.getGUID());
 
 		// UI manager
 		mUiManager = new UIManager(this);
@@ -92,12 +95,21 @@ public class Controller implements IMessageHandler, ICommandProcessor {
 		boolean handled = true;
 		switch (id) {
 
-		case ShowFileTransferWidget:
-			mUiManager.processCommand(CommandId.ShowFileTransferWidget, param,
+		case ShowFileTransferWidget: {
+			ClientInfo info = (ClientInfo) param.get(ParamKeys.ClientInfo);
+			if (!info.mClientGUID.equals(SystemInfo.getInstance().getString(
+					Keys.GUID))) {
+				mUiManager.processCommand(CommandId.ShowFileTransferWidget,
+						param, result);
+			}
+		}
+			break;
+		case ShowOneOneChatWidget:
+			mUiManager.processCommand(CommandId.ShowOneOneChatWidget, param,
 					result);
 			break;
 		case StartFileTransfer: {
-			mFileTransferService.processCommand(CommandId.StartFileTransfer,
+			mControlServerChannel.processCommand(CommandId.StartFileTransfer,
 					param, result);
 		}
 			break;
@@ -157,8 +169,7 @@ public class Controller implements IMessageHandler, ICommandProcessor {
 			break;
 		// my request is accepted
 		case OnFileTransferRequestAccepted: {
-			if(null == mFileTransferService)
-			{
+			if (null == mFileTransferService) {
 				mFileTransferService = new FileTransferService(this);
 				mFileTransferService.startFileTransfer(param);
 			}

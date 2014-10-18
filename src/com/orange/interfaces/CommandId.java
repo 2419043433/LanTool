@@ -15,4 +15,5 @@ public enum CommandId {
 	StartFileReceiveJob,
 	StartAllWaitingFileTransferJob,
 	AcceptFileTransferRequest,
+	ShowOneOneChatWidget,
 }

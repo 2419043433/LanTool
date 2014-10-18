@@ -17,11 +17,14 @@ import com.orange.interfaces.IMessageHandler;
 import com.orange.interfaces.MessageId;
 import com.orange.ui.desktop.FileTransferWidget;
 import com.orange.ui.desktop.MainFrame;
+import com.orange.ui.desktop.OneOneChatWidget;
 
 public class UIManager implements ICommandProcessor, IMessageHandler {
 	private MainFrame mMainFrame;
 	private Map<ClientInfo, FileTransferWidget> mClients = new HashMap<ClientInfo, FileTransferWidget>();
 	private IMessageHandler mMessageHandler;
+	
+	private Map<ClientInfo, OneOneChatWidget> mChatClients = new HashMap<ClientInfo, OneOneChatWidget>();
 
 	public UIManager(IMessageHandler handler) {
 		mMessageHandler = handler;
@@ -87,6 +90,18 @@ public class UIManager implements ICommandProcessor, IMessageHandler {
 			showFileTransferWidget(info);
 		}
 			break;
+		case ShowOneOneChatWidget: {
+			ClientInfo info = (ClientInfo) param.get(ParamKeys.ClientInfo);
+			OneOneChatWidget widget = mChatClients.get(info);
+			if(null == widget)
+			{
+				widget = new OneOneChatWidget(mMessageHandler);
+				widget.setClientInfo(info);
+				mChatClients.put(info, widget);
+				widget.show();
+			}
+		}
+			break;
 		case HideMainFrame:
 			hideMainFrame();
 			break;
@@ -130,8 +145,8 @@ public class UIManager implements ICommandProcessor, IMessageHandler {
 			mMessageHandler
 					.handleMessage(
 							option == JOptionPane.YES_OPTION ? MessageId.OnAcceptFileTransferRequest
-									: MessageId.OnDenyFileTransferRequest, param,
-							result);
+									: MessageId.OnDenyFileTransferRequest,
+							param, result);
 		}
 			break;
 
