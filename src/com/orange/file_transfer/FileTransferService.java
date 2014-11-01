@@ -12,6 +12,7 @@ import com.orange.interfaces.ICommandProcessor;
 import com.orange.interfaces.IMessageHandler;
 import com.orange.interfaces.MessageId;
 import com.orange.net.asio.AsyncChannelFactory;
+import com.orange.net.asio.AsyncChannelFactoryImpl;
 
 public class FileTransferService implements ICommandProcessor,
 		FileTransferJob.Client {
@@ -29,7 +30,7 @@ public class FileTransferService implements ICommandProcessor,
 		mJobs.add(job);
 		job.setClientInfo(info);
 		job.setFilePath(path);
-		job.setAsyncChannelFactory(new AsyncChannelFactory());
+		job.setAsyncChannelFactory(new AsyncChannelFactoryImpl());
 		job.setClient(this);
 		job.start();
 	}

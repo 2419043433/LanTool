@@ -6,13 +6,15 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.channels.CompletionHandler;
 import java.util.ArrayList;
+import java.util.concurrent.TimeUnit;
 
 import com.orange.base.ErrorCode;
 import com.orange.base.thread.Threads;
 import com.orange.client_manage.ClientInfo;
-import com.orange.net.asio.interfaces.AsyncChannelBase;
-import com.orange.net.asio.interfaces.AsyncChannelFactoryBase;
+import com.orange.net.asio.interfaces.IAsyncChannel;
+import com.orange.net.asio.interfaces.IAsyncChannelFactory;
 import com.orange.net.util.MessageCodecUtil;
 import com.orange.system.SystemInfo;
 import com.orange.system.SystemInfo.Keys;
@@ -47,8 +49,8 @@ public class FileTransferJob {
 	private long mFilePointer = 0;
 	private ClientInfo mClientInfo;
 	private Client mClient;
-	private AsyncChannelFactoryBase mChannelFactory;
-	private AsyncChannelBase mChannel;
+	private IAsyncChannelFactory mChannelFactory;
+	private IAsyncChannel mChannel;
 	private boolean mIsReadFinished = false;
 
 	private enum FileTransferState {
@@ -145,7 +147,7 @@ public class FileTransferJob {
 		mClient = client;
 	}
 
-	public void setAsyncChannelFactory(AsyncChannelFactoryBase channelFactory) {
+	public void setAsyncChannelFactory(IAsyncChannelFactory channelFactory) {
 		mChannelFactory = channelFactory;
 	}
 
@@ -171,9 +173,37 @@ public class FileTransferJob {
 			@Override
 			public void run() {
 				mChannel = mChannelFactory.createAsyncChannel();
-				mChannel.setClient(mAsyncChannelClient);
-				mChannel.connect(new InetSocketAddress(mClientInfo.mEndPoint
-						.getmIp(), mClientInfo.mControlPort));
+				mChannel.connect(
+						new InetSocketAddress(mClientInfo.mEndPoint.getmIp(),
+								mClientInfo.mControlPort), null,
+						new CompletionHandler<Void, Void>() {
+
+							@Override
+							public void completed(Void result, Void attachment) {
+								Threads.forThread(Threads.Type.IO_Network)
+										.post(new Runnable() {
+											@Override
+											public void run() {
+												assert (mState == FileTransferState.Connect);
+												if (mState != FileTransferState.Connect) {
+													mClient.onError(
+															FileTransferJob.this,
+															ErrorCode.ErrorIllegalState,
+															"Connect completed but job on state ["
+																	+ mState
+																	+ "]", null);
+													return;
+												}
+												sendHeader();
+											}
+										});
+							}
+
+							@Override
+							public void failed(Throwable exc, Void attachment) {
+
+							}
+						});
 				mState = FileTransferState.Connect;
 			}
 		});
@@ -189,14 +219,33 @@ public class FileTransferJob {
 				message.setFileBlockSize(mBlockSize);
 				message.setFileLength(mFile.length());
 				message.setFileName(mFile.getName());
-				message.setGUID(SystemInfo.getInstance().getString(Keys.GUID));;
+				message.setGUID(SystemInfo.getInstance().getString(Keys.GUID));
+				;
 				message.setJobId(SystemUtil.getLUID());
 				byte[] data = MessageCodecUtil.writeMessage(message);
 				mWriteBuffer = ByteBuffer.wrap(data);
-				mChannel.write(data, 0, data.length, null);
+				mChannel.write(mWriteBuffer, 0, TimeUnit.MILLISECONDS, null,
+						mWriteCompletionHandler);
 			}
 		});
 	}
+
+	private CompletionHandler<Integer, BlockBuffer.Item> mWriteCompletionHandler = new CompletionHandler<Integer, FileTransferJob.BlockBuffer.Item>() {
+
+		@Override
+		public void completed(
+				Integer result,
+				com.orange.file_transfer.FileTransferJob.BlockBuffer.Item attachment) {
+			Threads.forThread(Threads.Type.IO_Network).post(
+					new WriteCompletedRunnable(result, attachment));
+		}
+
+		@Override
+		public void failed(
+				Throwable exc,
+				com.orange.file_transfer.FileTransferJob.BlockBuffer.Item attachment) {
+		}
+	};
 
 	private void checkAndReadBody() {
 		if (!needReadBody()) {
@@ -261,7 +310,8 @@ public class FileTransferJob {
 				+ item.mIndex + "][threadid:" + Thread.currentThread().getId()
 				+ "][name:" + Thread.currentThread().getName() + "]");
 		mWriteBuffer = ByteBuffer.wrap(data);
-		mChannel.write(data, 0, data.length, (Object) item);
+		mChannel.write(mWriteBuffer, 0, TimeUnit.MILLISECONDS, item,
+				mWriteCompletionHandler);
 	}
 
 	private class ReadFileBlockRunnable implements Runnable {
@@ -320,119 +370,71 @@ public class FileTransferJob {
 		}
 	}
 
-	private AsyncChannelBase.Client mAsyncChannelClient = new AsyncChannelBase.Client() {
+	private int mSumLength = 0;
 
-		@Override
-		public boolean onReadCompleted(AsyncChannelBase channel, byte[] buffer,
-				int length, Object attach) {
+	class WriteCompletedRunnable implements Runnable {
+		private int mLengthHolder;
+		private BlockBuffer.Item mAttachHolder;
+
+		public WriteCompletedRunnable(int length, BlockBuffer.Item attach) {
+			mLengthHolder = length;
+			mAttachHolder = attach;
+		}
+
+		// if this block has not been fully send, continue to send
+		// the left bytes
+		private boolean checkAndContinueWrite() {
+			mSumLength += mLengthHolder;
+			mWriteBuffer.position(mWriteBuffer.position() + mLengthHolder);
+			System.out
+					.println("[sumlen:"
+							+ mSumLength
+							+ "][check:"
+							+ (mWriteBuffer.remaining() > 0 ? "#####################true"
+									: "false") + "][position:"
+							+ mWriteBuffer.position() + "][write length:"
+							+ mLengthHolder + "][remaining;"
+							+ mWriteBuffer.remaining() + "]");
+			if (mWriteBuffer.remaining() > 0) {
+				mChannel.write(mWriteBuffer, 0, TimeUnit.MILLISECONDS,
+						mAttachHolder, mWriteCompletionHandler);
+				return true;
+			}
+			mWriteBuffer.position(0);
 			return false;
 		}
 
 		@Override
-		public void onConnected(AsyncChannelBase channel) {
-
-			Threads.forThread(Threads.Type.IO_Network).post(new Runnable() {
-				@Override
-				public void run() {
-					assert (mState == FileTransferState.Connect);
-					if (mState != FileTransferState.Connect) {
-						mClient.onError(FileTransferJob.this,
-								ErrorCode.ErrorIllegalState,
-								"Connect completed but job on state [" + mState
-										+ "]", null);
-						return;
-					}
-					sendHeader();
+		public void run() {
+			assert (mState == FileTransferState.SendHeader || mState == FileTransferState.SendBody);
+			switch (mState) {
+			case SendHeader:
+				if (checkAndContinueWrite()) {
+					return;
 				}
-			});
+				mState = FileTransferState.SendBody;
+				break;
+			case SendBody:
+				BlockBuffer.Item item = (BlockBuffer.Item) mAttachHolder;
 
-		}
-
-		@Override
-		public void onError(AsyncChannelBase channel, ErrorCode errorCode,
-				String msg, Throwable throwable) {
-			// mClient.onError(FileTransferJob.this, errorCode, msg, throwable);
-			// may handle error here
-		}
-
-		private int mSumLength = 0;
-
-		class WriteCompletedRunnable implements Runnable {
-
-			private AsyncChannelBase mChannelHolder;
-			private int mLengthHolder;
-			private Object mAttachHolder;
-
-			public WriteCompletedRunnable(AsyncChannelBase channel, int length,
-					Object attach) {
-				mChannelHolder = channel;
-				mLengthHolder = length;
-				mAttachHolder = attach;
-			}
-
-			// if this block has not been fully send, continue to send
-			// the left bytes
-			private boolean checkAndContinueWrite() {
-				mSumLength += mLengthHolder;
-				mWriteBuffer.position(mWriteBuffer.position() + mLengthHolder);
-				System.out
-						.println("[sumlen:"
-								+ mSumLength
-								+ "][check:"
-								+ (mWriteBuffer.remaining() > 0 ? "#####################true"
-										: "false") + "][position:"
-								+ mWriteBuffer.position() + "][write length:"
-								+ mLengthHolder + "][remaining;"
-								+ mWriteBuffer.remaining() + "]");
-				if (mWriteBuffer.remaining() > 0) {
-					mChannel.write(mWriteBuffer.array(),
-							mWriteBuffer.position(), mWriteBuffer.remaining(),
-							mAttachHolder);
-					return true;
+				if (checkAndContinueWrite()) {
+					return;
 				}
-				mWriteBuffer.position(0);
-				return false;
+				item.mState = BlockBufferState.Idle;
+				mSendBlockMarks.onBlockFinished(item.mIndex);
+				// System.out.println("onWriteCompleted: [length:"
+				// + mLengthHolder + "][index:" + item.mIndex
+				// + "][threadid:" + Thread.currentThread().getId()
+				// + "][name:" + Thread.currentThread().getName()
+				// + "]");
+				break;
+			default:
+				break;
 			}
-
-			@Override
-			public void run() {
-				assert (mState == FileTransferState.SendHeader || mState == FileTransferState.SendBody);
-				switch (mState) {
-				case SendHeader:
-					if (checkAndContinueWrite()) {
-						return;
-					}
-					mState = FileTransferState.SendBody;
-					break;
-				case SendBody:
-					BlockBuffer.Item item = (BlockBuffer.Item) mAttachHolder;
-
-					if (checkAndContinueWrite()) {
-						return;
-					}
-					item.mState = BlockBufferState.Idle;
-					mSendBlockMarks.onBlockFinished(item.mIndex);
-					// System.out.println("onWriteCompleted: [length:"
-					// + mLengthHolder + "][index:" + item.mIndex
-					// + "][threadid:" + Thread.currentThread().getId()
-					// + "][name:" + Thread.currentThread().getName()
-					// + "]");
-					break;
-				default:
-					break;
-				}
-				sendBody();
-				checkAndReadBody();
-			}
+			sendBody();
+			checkAndReadBody();
 		}
-
-		@Override
-		public void onWriteCompleted(AsyncChannelBase channel, int length,
-				Object attach) {
-			Threads.forThread(Threads.Type.IO_Network).post(
-					new WriteCompletedRunnable(channel, length, attach));
-		}
-	};
+	}
 
 	// at most one item can be in Reading or Sending state,
 	// other items are in either Idle or ReadOK state

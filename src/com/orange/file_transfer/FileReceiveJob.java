@@ -4,17 +4,17 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.CompletionHandler;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.concurrent.TimeUnit;
 
-import com.orange.base.ErrorCode;
 import com.orange.base.thread.Threads;
 import com.orange.net.FrameDecoder;
 import com.orange.net.MessageDecoder;
-import com.orange.net.asio.interfaces.AsyncChannelBase;
+import com.orange.net.asio.interfaces.IAsyncChannel;
 import com.orange.net.interfaces.IMessage;
 import com.orange.net.interfaces.IStreamDecoder;
 import com.orange.net.util.MessageCodecUtil;
@@ -22,12 +22,15 @@ import com.orange.net.util.MessageCodecUtil;
 /*
  * for one file receive
  */
-public class FileReceiveJob implements AsyncChannelBase.Client {
+public class FileReceiveJob {
 
 	private static final String TAG = "FileReceiveJob";
 	private IStreamDecoder mStreamDecoder;
-	private AsyncChannelBase mChannel;
+	private IAsyncChannel mChannel;
+	private ByteBuffer mReceiveBuffer = ByteBuffer.wrap(new byte[40960]);
 	private FileTransferHeaderMessage mHeader;
+
+	private int mReceivedLength = 0;// used for test, including header and body
 	private String mGUID;
 	// block marks
 	BlockMarks mReceivedBlockMarks;
@@ -46,33 +49,23 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 
 		void onError(FileReceiveJob job);
 	}
-	
-	public void setHeader(FileTransferHeaderMessage header)
-	{
+
+	public void setHeader(FileTransferHeaderMessage header) {
 		mHeader = header;
 	}
 
-	public void setGUID(String guid)
-	{
+	public void setGUID(String guid) {
 		mGUID = guid;
 	}
+
 	private void log(String info) {
 		// Logger.getLogger(TAG).log(Level.INFO, info);
 	}
 
-	public void bind(AsyncChannelBase channel) {
-		if (null != channel) {
-			mChannel = channel;
-			mChannel.setClient(this);
-		}
-	}
+	public FileReceiveJob(IAsyncChannel channel) {
 
-	public FileReceiveJob(AsyncChannelBase channel) {
-		// setup channel
-		if (null != channel) {
-			mChannel = channel;
-			mChannel.setClient(this);
-		}
+		mChannel = channel;
+
 		// setup decoders
 		MessageDecoder messageDecoder = new MessageDecoder();
 		messageDecoder.add(FileTransferHeaderMessage.class.getName(),
@@ -139,10 +132,42 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 		Threads.forThread(Threads.Type.IO_Network).post(new Runnable() {
 			@Override
 			public void run() {
-				mChannel.read(null);
+				mChannel.read(mReceiveBuffer, 0L, TimeUnit.MILLISECONDS, null,
+						mReadCompletionHandler);
 			}
 		});
 	}
+
+	private CompletionHandler<Integer, Void> mReadCompletionHandler = new CompletionHandler<Integer, Void>() {
+
+		@Override
+		public void completed(Integer result, Void attachment) {
+			/*
+			 * Callbacks of IAsyncChannel are from different thread, but we need
+			 * handle all the decode OP on IO_Network Thread, so just post this
+			 * runnable to IO_Network thread to handle read complete OP
+			 */
+			Threads.forThread(Threads.Type.IO_Network).post(new Runnable() {
+				@Override
+				public void run() {
+					// do decode and continue read from channel
+					mReceivedLength += result;
+					if (mHeader != null) {
+						System.out.println("receive:" + mReceivedLength
+								+ " file length:" + mHeader.getFileLength());
+					}
+					mStreamDecoder.decode(mReceiveBuffer.array(), 0, result);
+					mChannel.read(mReceiveBuffer, 0L, TimeUnit.MILLISECONDS,
+							null, mReadCompletionHandler);
+				}
+			});
+		}
+
+		@Override
+		public void failed(Throwable exc, Void attachment) {
+
+		}
+	};
 
 	/*
 	 * Write block to file, run in IO_File Thread
@@ -228,66 +253,4 @@ public class FileReceiveJob implements AsyncChannelBase.Client {
 			return true;
 		}
 	};
-
-	/*
-	 * Callbacks of AsynchronousSocketChannel are from different thread, but we
-	 * need handle all the decode OP on IO_Network Thread, so just post this
-	 * runnable to IO_Network thread to handle read complete OP
-	 */
-	private int sumLength = 0;
-
-	class ReadCompletedRunnable implements Runnable {
-		private AsyncChannelBase mChannelHolder;
-		private byte[] mBufferHolder;
-		private int mLengthHolder;
-		private Object mAttachHolder;
-
-		public ReadCompletedRunnable(AsyncChannelBase channel, byte[] buffer,
-				int length, Object attach) {
-			mChannelHolder = channel;
-			mBufferHolder = buffer;
-			mLengthHolder = length;
-			mAttachHolder = attach;
-		}
-
-		@Override
-		public void run() {
-			log("onReadCompleted: " + mLengthHolder);
-			// do decode and continue read from channel
-			// TODO: judge return value of decode OP, continue read only no
-			// error occurs
-			sumLength += mLengthHolder;
-			if (mHeader != null) {
-				System.out.println("receive:" + sumLength + " file length:"
-						+ mHeader.getFileLength());
-			}
-			mStreamDecoder.decode(mBufferHolder, 0, mLengthHolder);
-			mChannel.read(null);
-		}
-	}
-
-	// From AsyncChannelBase.Client , all the callbacks below are run in kernel
-	// thread
-	@Override
-	public boolean onReadCompleted(AsyncChannelBase channel, byte[] buffer,
-			int length, Object attach) {
-		Threads.forThread(Threads.Type.IO_Network).post(
-				new ReadCompletedRunnable(channel, buffer, length, attach));
-		return true;
-	}
-
-	@Override
-	public void onError(AsyncChannelBase channel, ErrorCode errorCode,
-			String msg, Throwable throwable) {
-	}
-
-	@Override
-	public void onConnected(AsyncChannelBase channel) {
-	}
-
-	@Override
-	public void onWriteCompleted(AsyncChannelBase channel, int length,
-			Object attach) {
-	}
-
 }

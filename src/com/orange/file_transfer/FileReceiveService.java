@@ -1,6 +1,7 @@
 package com.orange.file_transfer;
 
 import java.net.InetSocketAddress;
+import java.nio.channels.CompletionHandler;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -16,66 +17,52 @@ import com.orange.interfaces.MessageId;
 import com.orange.net.asio.interfaces.AsyncChannelBase;
 import com.orange.net.asio.interfaces.AsyncChannelFactoryBase;
 import com.orange.net.asio.interfaces.AsyncServerChannelBase;
+import com.orange.net.asio.interfaces.IAsyncChannel;
+import com.orange.net.asio.interfaces.IAsyncChannelFactory;
+import com.orange.net.asio.interfaces.IAsyncServerChannel;
 
 public class FileReceiveService implements ICommandProcessor {
 	private IMessageHandler mMessageHandler;
-	private AsyncChannelFactoryBase mChannelFactory;
-	private Map<AsyncChannelBase, FileReceiveJob> mJobs = new HashMap<AsyncChannelBase, FileReceiveJob>();
+	private IAsyncChannelFactory mChannelFactory;
+	private Map<IAsyncChannel, FileReceiveJob> mJobs = new HashMap<IAsyncChannel, FileReceiveJob>();
 	private Map<String, FileReceiveJob> mWaitingJobs = new HashMap<String, FileReceiveJob>();
 
 	public FileReceiveService(IMessageHandler handler) {
 		mMessageHandler = handler;
 	}
 
-	public void setChannelFactory(AsyncChannelFactoryBase channelFactory) {
+	public void setChannelFactory(IAsyncChannelFactory channelFactory) {
 		mChannelFactory = channelFactory;
 	}
 
 	public int start(int port, int bindMaxTryCount) {
-		AsyncServerChannelBase channel = mChannelFactory
+		IAsyncServerChannel channel = mChannelFactory
 				.createAsyncServerChannel();
-		channel.setPort(port, bindMaxTryCount);
-		channel.setClient(mAsyncServerChannelClient);
-		return channel.start();
+		while (bindMaxTryCount > 0) {
+			try {
+				channel.bind(new InetSocketAddress(port));
+				channel.accept(null,
+						new CompletionHandler<IAsyncChannel, Void>() {
+
+							@Override
+							public void completed(IAsyncChannel result,
+									Void attachment) {
+
+							}
+
+							@Override
+							public void failed(Throwable exc, Void attachment) {
+
+							}
+						});
+				break;
+			} catch (Exception e) {
+				port++;
+				bindMaxTryCount--;
+			}
+		}
+		return port;
 	}
-
-	private FileReceiveJob.Client mFileReceiveJobClient = new FileReceiveJob.Client() {
-
-		@Override
-		public void onProgressChanged(FileReceiveJob job, int progress) {
-			// TODO Auto-generated method stub
-
-		}
-
-		@Override
-		public void onError(FileReceiveJob job) {
-			// TODO Auto-generated method stub
-
-		}
-	};
-
-	private AsyncServerChannelBase.Client mAsyncServerChannelClient = new AsyncServerChannelBase.Client() {
-
-		@Override
-		public void onError(ErrorCode code) {
-
-		}
-
-		@Override
-		public void onAccept(AsyncChannelBase channel) {
-			FileReceiveJob job = new FileReceiveJob(channel);
-			job.setClient(mFileReceiveJobClient);
-			job.start();
-			mJobs.put(channel, job);
-		}
-
-		@Override
-		public void onStartOk(int port) {
-			Params param = Params.obtain().put(ParamKeys.Port, port);
-			mMessageHandler.handleMessage(
-					MessageId.OnFileReceivedServiceStartOk, param, null);
-		}
-	};
 
 	@Override
 	public boolean processCommand(CommandId id, Params param, Params result) {
@@ -91,7 +78,7 @@ public class FileReceiveService implements ICommandProcessor {
 			job.setHeader(msg);
 			job.setGUID(guid);
 			mWaitingJobs.put(msg.getJobId(), job);
-			
+
 		}
 			break;
 

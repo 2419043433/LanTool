@@ -1,6 +1,10 @@
 package com.orange.net.controller;
 
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.nio.ByteBuffer;
+import java.util.LinkedList;
+import java.util.Queue;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -29,6 +33,8 @@ public class ControlChannel implements AsyncChannelBase.Client {
 
 		void onAcceptFileTransferRequest(ControlChannel channel,
 				AcceptFileTransfer_ResponseMessage msg);
+
+		void onConnected(ControlChannel channel);
 	}
 
 	public ControlChannel(AsyncChannelBase channel) {
@@ -46,14 +52,12 @@ public class ControlChannel implements AsyncChannelBase.Client {
 		mStreamDecoder = new FrameDecoder(messageDecoder);
 
 	}
-	
-	public void setGUID(String guid)
-	{
+
+	public void setGUID(String guid) {
 		mGUID = guid;
 	}
-	
-	public String getGUID()
-	{
+
+	public String getGUID() {
 		return mGUID;
 	}
 
@@ -65,12 +69,15 @@ public class ControlChannel implements AsyncChannelBase.Client {
 		startOnIOThread();
 	}
 
+	private Queue<ByteBuffer> mPendingBuffers = new LinkedList<ByteBuffer>();
+
 	public void write(IMessage msg) {
 		// serialize and send
 		// TODO: add serialize logic, add mechanism to ensure data is sent ok
 		byte[] data = MessageCodecUtil.writeMessage(msg);
-		mChannel.write(data, 0, data.length, null);
-
+		ByteBuffer bt = ByteBuffer.wrap(data);
+		mPendingBuffers.offer(bt);
+		mChannel.write(bt.array(), bt.position(), bt.remaining(), null);
 	}
 
 	private void startOnIOThread() {
@@ -81,6 +88,11 @@ public class ControlChannel implements AsyncChannelBase.Client {
 				mChannel.read(null);
 			}
 		});
+	}
+	
+	void connect(SocketAddress server)
+	{
+		mChannel.connect(server);
 	}
 
 	// TODO: make it as template
@@ -162,14 +174,41 @@ public class ControlChannel implements AsyncChannelBase.Client {
 
 	@Override
 	public void onConnected(AsyncChannelBase channel) {
-		// TODO Auto-generated method stub
+		mClient.onConnected(ControlChannel.this);
 
+	}
+
+	//TODO: make a common writecomplete handler
+	class WriteCompletedRunnable implements Runnable {
+		private int mLengthHolder;
+
+		public WriteCompletedRunnable(AsyncChannelBase channel, int length,
+				Object attach) {
+			mLengthHolder = length;
+		}
+
+		@Override
+		public void run() {
+			ByteBuffer bt = mPendingBuffers.peek();
+			bt.position(bt.position() + mLengthHolder);
+			if (bt.remaining() > 0) {
+				mChannel.write(bt.array(), bt.position(), bt.remaining(), null);
+				return;
+			}
+			mPendingBuffers.poll();
+			if (mPendingBuffers.size() > 0) {
+				ByteBuffer next = mPendingBuffers.peek();
+				mChannel.write(next.array(), next.position(), next.remaining(),
+						null);
+			}
+		}
 	}
 
 	@Override
 	public void onWriteCompleted(AsyncChannelBase channel, int length,
 			Object attach) {
-		// TODO Auto-generated method stub
+		Threads.forThread(Threads.Type.IO_Network).post(
+				new WriteCompletedRunnable(channel, length, attach));
 
 	}
 

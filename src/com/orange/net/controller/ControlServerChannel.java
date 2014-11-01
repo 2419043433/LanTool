@@ -49,6 +49,16 @@ public class ControlServerChannel implements ICommandProcessor {
 		channel.setClient(mAsyncServerChannelClient);
 		return channel.start();
 	}
+	
+	private void connect(ClientInfo info)
+	{
+		AsyncChannelBase channelBase = mChannelFactory.createAsyncChannel();
+		ControlChannel controlChannel = new ControlChannel(channelBase);
+		channelBase.setClient(controlChannel);
+		controlChannel.setClient(mControlChannelClient);
+		controlChannel.connect(new InetSocketAddress(info.mEndPoint
+				.getmIp(), info.mControlPort));
+	}
 
 	private ControlChannel.Client mControlChannelClient = new ControlChannel.Client() {
 
@@ -83,6 +93,11 @@ public class ControlServerChannel implements ICommandProcessor {
 			mMessageHandler.handleMessage(
 					MessageId.OnFileTransferRequestAccepted, param, null);
 
+		}
+
+		@Override
+		public void onConnected(ControlChannel channel) {
+			mChannels.put(channel.getGUID(), channel);
 		}
 	};
 
