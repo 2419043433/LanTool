@@ -11,7 +11,6 @@ import com.orange.interfaces.CommandId;
 import com.orange.interfaces.ICommandProcessor;
 import com.orange.interfaces.IMessageHandler;
 import com.orange.interfaces.MessageId;
-import com.orange.net.asio.AsyncChannelFactory;
 import com.orange.net.asio.AsyncChannelFactoryImpl;
 
 public class FileTransferService implements ICommandProcessor,

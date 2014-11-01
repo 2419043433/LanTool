@@ -16,7 +16,7 @@ import com.orange.interfaces.CommandId;
 import com.orange.interfaces.ICommandProcessor;
 import com.orange.interfaces.IMessageHandler;
 import com.orange.interfaces.MessageId;
-import com.orange.net.asio.AsyncChannelFactory;
+import com.orange.net.asio.AsyncChannelFactoryImpl;
 import com.orange.net.controller.ControlServerChannel;
 import com.orange.net.heart_beat_service.HeartBeatMessage;
 import com.orange.net.heart_beat_service.HeartBeatService;
@@ -155,7 +155,7 @@ public class Controller implements IMessageHandler, ICommandProcessor {
 			if (null == mFileReceiveService) {
 				mFileReceiveService = new FileReceiveService(this);
 				mFileReceiveService
-						.setChannelFactory(new AsyncChannelFactory());
+						.setChannelFactory(new AsyncChannelFactoryImpl());
 				int port = mFileReceiveService.start(7000, 5);
 				if (port < 0) {
 					// handle errro;
