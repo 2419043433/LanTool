@@ -1,17 +1,24 @@
 package com.orange.file_transfer;
 
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+
 /*
- * a Range should map with a set of blocks
+ * a Range stands for a closed boundary range
+ * that means Range[1, 2] include both 1 and 2.
  */
 public class Range
 {
     private long mStart;
     private long mEnd;
+    private ArrayList<ByteBuffer> mDatas = new ArrayList<ByteBuffer>();
 
-    public Range(long start, long end)
+    public Range(long start, long end, ByteBuffer data)
     {
         mStart = start;
         mEnd = end;
+        mDatas.add(data);
+
     }
 
     public long getStart()
@@ -29,12 +36,17 @@ public class Range
         return mEnd;
     }
 
-    public void setmEnd(long end)
+    public void setEnd(long end)
     {
         this.mEnd = end;
     }
 
-    private boolean isAdjacent(Range other)
+    public boolean lessThan(Range other)
+    {
+        return mEnd < other.mStart;
+    }
+
+    public boolean isAdjacent(Range other)
     {
         return mStart == other.mEnd + 1 || other.mStart == mEnd + 1;
     }
@@ -44,10 +56,12 @@ public class Range
         if (mStart == other.mEnd + 1)
         {
             mStart = other.mStart;
+            mDatas.addAll(0, other.mDatas);
         }
         else if (other.mStart == mEnd + 1)
         {
             mEnd = other.mEnd;
+            mDatas.addAll(other.mDatas);
         }
     }
 
