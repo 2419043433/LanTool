@@ -1,219 +1,270 @@
 package com.orange.net.controller;
 
-import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.channels.CompletionHandler;
 import java.util.LinkedList;
 import java.util.Queue;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.concurrent.TimeUnit;
 
-import com.orange.base.ErrorCode;
 import com.orange.base.thread.Threads;
 import com.orange.file_transfer.FileTransferHeaderMessage;
 import com.orange.net.FrameDecoder;
 import com.orange.net.MessageDecoder;
-import com.orange.net.asio.interfaces.AsyncChannelBase;
+import com.orange.net.MessageEncoder;
+import com.orange.net.asio.interfaces.IAsyncChannel;
 import com.orange.net.interfaces.IMessage;
 import com.orange.net.interfaces.IStreamDecoder;
 import com.orange.net.util.MessageCodecUtil;
 
-public class ControlChannel implements AsyncChannelBase.Client {
-	private static final String TAG = "ControlChannel";
-	private AsyncChannelBase mChannel;
-	private IStreamDecoder mStreamDecoder;
-	private Client mClient;
-	private String mGUID;
+public class ControlChannel
+{
+    private static final String TAG = "ControlChannel";
+    private IAsyncChannel mChannel;
+    private IStreamDecoder mStreamDecoder;
+    private MessageEncoder mMessageEncoder;
+    private Client mClient;
+    private String mGUID;
+    private ByteBuffer mReceiveBuffer = ByteBuffer.wrap(new byte[40960]);
+    private Queue<ByteBuffer> mPendingBuffers = new LinkedList<ByteBuffer>();
 
-	public static interface Client {
-		void onFileTransferRequest(ControlChannel channel,
-				FileTransferHeaderMessage msg);
+    public static interface Client
+    {
+        void onFileTransferRequest(ControlChannel channel, FileTransferHeaderMessage msg);
 
-		void onClientIdentify(ControlChannel channel, IdentifyMessage msg);
+        void onClientIdentify(ControlChannel channel, IdentifyMessage msg);
 
-		void onAcceptFileTransferRequest(ControlChannel channel,
-				AcceptFileTransfer_ResponseMessage msg);
+        void onAcceptFileTransferRequest(ControlChannel channel, AcceptFileTransfer_ResponseMessage msg);
 
-		void onConnected(ControlChannel channel);
-	}
+        void onConnected(ControlChannel channel);
+    }
 
-	public ControlChannel(AsyncChannelBase channel) {
-		mChannel = channel;
-		mChannel.setClient(this);
-		MessageDecoder messageDecoder = new MessageDecoder();
-		// add request(file or other[video, audio]) handler
-		messageDecoder.add(FileTransferHeaderMessage.class.getName(),
-				mFileHeaderMessageHandler);
-		messageDecoder.add(IdentifyMessage.class.getName(),
-				mIdentifyMessageHandler);
-		messageDecoder.add(AcceptFileTransfer_ResponseMessage.class.getName(),
-				mAcceptFileTransferMessageHandler);
+    public ControlChannel(IAsyncChannel channel)
+    {
+        mChannel = channel;
+        MessageDecoder messageDecoder = new MessageDecoder();
+        // add request(file or other[video, audio]) handler
+        messageDecoder.add(FileTransferHeaderMessage.class.getName(), mFileHeaderMessageHandler);
+        messageDecoder.add(IdentifyMessage.class.getName(), mIdentifyMessageHandler);
+        messageDecoder.add(AcceptFileTransfer_ResponseMessage.class.getName(), mAcceptFileTransferMessageHandler);
 
-		mStreamDecoder = new FrameDecoder(messageDecoder);
+        mStreamDecoder = new FrameDecoder(messageDecoder);
+        mMessageEncoder = new MessageEncoder();
 
-	}
+    }
 
-	public void setGUID(String guid) {
-		mGUID = guid;
-	}
+    public void setGUID(String guid)
+    {
+        mGUID = guid;
+    }
 
-	public String getGUID() {
-		return mGUID;
-	}
+    public String getGUID()
+    {
+        return mGUID;
+    }
 
-	public void setClient(Client client) {
-		mClient = client;
-	}
+    public void setClient(Client client)
+    {
+        mClient = client;
+    }
 
-	public void start() {
-		startOnIOThread();
-	}
+    public void start()
+    {
+        startOnIOThread();
+    }
 
-	private Queue<ByteBuffer> mPendingBuffers = new LinkedList<ByteBuffer>();
+    public SocketAddress getRemoteAddress()
+    {
+        return mChannel.getRemoteAddress();
+    }
 
-	public void write(IMessage msg) {
-		// serialize and send
-		// TODO: add serialize logic, add mechanism to ensure data is sent ok
-		byte[] data = MessageCodecUtil.writeMessage(msg);
-		ByteBuffer bt = ByteBuffer.wrap(data);
-		mPendingBuffers.offer(bt);
-		mChannel.write(bt.array(), bt.position(), bt.remaining(), null);
-	}
+    public void write(IMessage msg)
+    {
+        // serialize and send
+        // TODO: add serialize logic, add mechanism to ensure data is sent ok
+        byte[] data = mMessageEncoder.message(msg).encode();
+        ByteBuffer bt = ByteBuffer.wrap(data);
+        mPendingBuffers.offer(bt);
+        mChannel.write(bt, 0, TimeUnit.MILLISECONDS, null, mWriteCompletionHandler);
+    }
 
-	private void startOnIOThread() {
-		Threads.forThread(Threads.Type.IO_Network).post(new Runnable() {
+    private CompletionHandler<Integer, Void> mWriteCompletionHandler = new CompletionHandler<Integer, Void>()
+    {
+        @Override
+        public void completed(Integer result, Void attachment)
+        {
+            Threads.forThread(Threads.Type.IO_Network).post(new Runnable()
+            {
+                @Override
+                public void run()
+                {
+                    ByteBuffer bt = mPendingBuffers.peek();
+                    bt.position(bt.position() + result);
+                    if (bt.remaining() > 0)
+                    {
+                        mChannel.write(bt, 0, TimeUnit.MILLISECONDS, null, mWriteCompletionHandler);
+                        return;
+                    }
+                    mPendingBuffers.poll();
+                    if (mPendingBuffers.size() > 0)
+                    {
+                        ByteBuffer next = mPendingBuffers.peek();
+                        mChannel.write(next, 0, TimeUnit.MILLISECONDS, null, mWriteCompletionHandler);
+                    }
+                }
+            });
+        }
 
-			@Override
-			public void run() {
-				mChannel.read(null);
-			}
-		});
-	}
-	
-	void connect(SocketAddress server)
-	{
-		mChannel.connect(server);
-	}
+        @Override
+        public void failed(Throwable exc, Void attachment)
+        {
+            // TODO Auto-generated method stub
 
-	// TODO: make it as template
-	private com.orange.net.interfaces.IMessageHandler mFileHeaderMessageHandler = new com.orange.net.interfaces.IMessageHandler() {
+        }
+    };
 
-		@Override
-		public boolean handleMessage(IMessage msg) {
-			FileTransferHeaderMessage requestMessage = MessageCodecUtil
-					.convert(msg);
-			if (null == requestMessage) {
-				return false;
-			}
-			Threads.forThread(Threads.Type.UI).post(new Runnable() {
-				@Override
-				public void run() {
-					mClient.onFileTransferRequest(ControlChannel.this,
-							requestMessage);
-				}
-			});
-			return true;
-		}
-	};
+    private void doRead()
+    {
+        mReceiveBuffer.clear();
+        mChannel.read(mReceiveBuffer, 0L, TimeUnit.MILLISECONDS, null, mReadCompletionHandler);
+    }
 
-	private com.orange.net.interfaces.IMessageHandler mIdentifyMessageHandler = new com.orange.net.interfaces.IMessageHandler() {
+    private void startOnIOThread()
+    {
+        Threads.forThread(Threads.Type.IO_Network).post(new Runnable()
+        {
+            @Override
+            public void run()
+            {
+                doRead();
+            }
+        });
+    }
 
-		@Override
-		public boolean handleMessage(IMessage msg) {
-			IdentifyMessage requestMessage = MessageCodecUtil.convert(msg);
-			if (null == requestMessage) {
-				return false;
-			}
-			Threads.forThread(Threads.Type.UI).post(new Runnable() {
-				@Override
-				public void run() {
-					ControlChannel.this.setGUID(requestMessage.getmGUID());
-					mClient.onClientIdentify(ControlChannel.this,
-							requestMessage);
-				}
-			});
-			return true;
-		}
-	};
+    public void connect(SocketAddress server)
+    {
+        mChannel.connect(server, null, new CompletionHandler<Void, Void>()
+        {
+            @Override
+            public void completed(Void result, Void attachment)
+            {
+                Threads.forThread(Threads.Type.UI).post(new Runnable()
+                {
+                    @Override
+                    public void run()
+                    {
+                        mClient.onConnected(ControlChannel.this);
+                    }
+                });
+            }
 
-	private com.orange.net.interfaces.IMessageHandler mAcceptFileTransferMessageHandler = new com.orange.net.interfaces.IMessageHandler() {
+            @Override
+            public void failed(Throwable exc, Void attachment)
+            {
 
-		@Override
-		public boolean handleMessage(IMessage msg) {
-			AcceptFileTransfer_ResponseMessage message = MessageCodecUtil
-					.convert(msg);
-			if (null == message) {
-				return false;
-			}
-			Threads.forThread(Threads.Type.UI).post(new Runnable() {
-				@Override
-				public void run() {
-					mClient.onAcceptFileTransferRequest(ControlChannel.this,
-							message);
-				}
-			});
-			return true;
-		}
-	};
+            }
+        });
+    }
 
-	@Override
-	public boolean onReadCompleted(AsyncChannelBase channel, byte[] buffer,
-			int length, Object attach) {
-		Logger.getLogger(TAG).log(Level.INFO, "onReadCompleted: " + length);
-		mStreamDecoder.decode(buffer, 0, length);
-		mChannel.read(null);
-		return true;
-	}
+    private CompletionHandler<Integer, Void> mReadCompletionHandler = new CompletionHandler<Integer, Void>()
+    {
 
-	@Override
-	public void onError(AsyncChannelBase channel, ErrorCode errorCode,
-			String msg, Throwable throwable) {
-		// TODO Auto-generated method stub
+        @Override
+        public void completed(Integer result, Void attachment)
+        {
+            /*
+             * Callbacks of IAsyncChannel are from different thread, but we need
+             * handle all the decode OP on IO_Network Thread, so just post this
+             * runnable to IO_Network thread to handle read complete OP
+             */
+            Threads.forThread(Threads.Type.IO_Network).post(new Runnable()
+            {
+                @Override
+                public void run()
+                {
+                    // do decode and continue read from channel
+                    mStreamDecoder.decode(mReceiveBuffer.array(), 0, result);
+                    doRead();
+                }
+            });
+        }
 
-	}
+        @Override
+        public void failed(Throwable exc, Void attachment)
+        {
 
-	@Override
-	public void onConnected(AsyncChannelBase channel) {
-		mClient.onConnected(ControlChannel.this);
+        }
+    };
 
-	}
+    // TODO: make it as template
+    private com.orange.net.interfaces.IMessageHandler mFileHeaderMessageHandler = new com.orange.net.interfaces.IMessageHandler()
+    {
 
-	//TODO: make a common writecomplete handler
-	class WriteCompletedRunnable implements Runnable {
-		private int mLengthHolder;
+        @Override
+        public boolean handleMessage(IMessage msg)
+        {
+            FileTransferHeaderMessage requestMessage = MessageCodecUtil.convert(msg);
+            if (null == requestMessage)
+            {
+                return false;
+            }
+            Threads.forThread(Threads.Type.UI).post(new Runnable()
+            {
+                @Override
+                public void run()
+                {
+                    mClient.onFileTransferRequest(ControlChannel.this, requestMessage);
+                }
+            });
+            return true;
+        }
+    };
 
-		public WriteCompletedRunnable(AsyncChannelBase channel, int length,
-				Object attach) {
-			mLengthHolder = length;
-		}
+    private com.orange.net.interfaces.IMessageHandler mIdentifyMessageHandler = new com.orange.net.interfaces.IMessageHandler()
+    {
 
-		@Override
-		public void run() {
-			ByteBuffer bt = mPendingBuffers.peek();
-			bt.position(bt.position() + mLengthHolder);
-			if (bt.remaining() > 0) {
-				mChannel.write(bt.array(), bt.position(), bt.remaining(), null);
-				return;
-			}
-			mPendingBuffers.poll();
-			if (mPendingBuffers.size() > 0) {
-				ByteBuffer next = mPendingBuffers.peek();
-				mChannel.write(next.array(), next.position(), next.remaining(),
-						null);
-			}
-		}
-	}
+        @Override
+        public boolean handleMessage(IMessage msg)
+        {
+            IdentifyMessage requestMessage = MessageCodecUtil.convert(msg);
+            if (null == requestMessage)
+            {
+                return false;
+            }
+            Threads.forThread(Threads.Type.UI).post(new Runnable()
+            {
+                @Override
+                public void run()
+                {
+                    ControlChannel.this.setGUID(requestMessage.getmGUID());
+                    mClient.onClientIdentify(ControlChannel.this, requestMessage);
+                }
+            });
+            return true;
+        }
+    };
 
-	@Override
-	public void onWriteCompleted(AsyncChannelBase channel, int length,
-			Object attach) {
-		Threads.forThread(Threads.Type.IO_Network).post(
-				new WriteCompletedRunnable(channel, length, attach));
+    private com.orange.net.interfaces.IMessageHandler mAcceptFileTransferMessageHandler = new com.orange.net.interfaces.IMessageHandler()
+    {
 
-	}
-
-	public InetSocketAddress getRemoteAddress() {
-		return mChannel.getRemoteAddress();
-	}
+        @Override
+        public boolean handleMessage(IMessage msg)
+        {
+            AcceptFileTransfer_ResponseMessage message = MessageCodecUtil.convert(msg);
+            if (null == message)
+            {
+                return false;
+            }
+            Threads.forThread(Threads.Type.UI).post(new Runnable()
+            {
+                @Override
+                public void run()
+                {
+                    mClient.onAcceptFileTransferRequest(ControlChannel.this, message);
+                }
+            });
+            return true;
+        }
+    };
 
 }
